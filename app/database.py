@@ -21,6 +21,12 @@ async def get_db_connection():
         await db.execute("PRAGMA foreign_keys=ON;")
         yield db
 
+async def has_any_users() -> bool:
+    async with get_db_connection() as db:
+        cursor = await db.execute("SELECT COUNT(*) as cnt FROM users")
+        row = await cursor.fetchone()
+        return (row["cnt"] if row else 0) > 0
+
 async def init_db():
     async with get_db_connection() as db:
 
@@ -118,15 +124,16 @@ async def init_db():
         if "traffic_up_bytes" not in log_cols:
             await db.execute("ALTER TABLE metrics_log ADD COLUMN traffic_up_bytes INTEGER DEFAULT 0;")
 
-        # Seed initial admin user if not exists
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (settings.DEFAULT_USERNAME,))
-        user = await cursor.fetchone()
-        if not user:
-            pw_hash = hash_password(settings.DEFAULT_PASSWORD)
-            await db.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (settings.DEFAULT_USERNAME, pw_hash)
-            )
+        # Seed initial admin user ONLY if explicitly provided via env settings
+        if settings.DEFAULT_USERNAME and settings.DEFAULT_PASSWORD:
+            cursor = await db.execute("SELECT COUNT(*) as cnt FROM users")
+            row = await cursor.fetchone()
+            if (row["cnt"] if row else 0) == 0:
+                pw_hash = hash_password(settings.DEFAULT_PASSWORD)
+                await db.execute(
+                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    (settings.DEFAULT_USERNAME, pw_hash)
+                )
 
         # Seed initial settings
         default_settings = [

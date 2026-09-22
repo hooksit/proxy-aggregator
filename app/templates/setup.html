@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Первоначальная настройка | VPN Config Vault</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0f172a',
+                        cardbg: '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 lg:p-10 relative overflow-hidden">
+        <!-- Glow accent behind the card -->
+        <div class="absolute -top-24 -right-24 w-60 h-60 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-24 -left-24 w-60 h-60 bg-purple-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="relative z-10 text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 mb-4 border border-indigo-500/30 shadow-lg shadow-indigo-500/10">
+                <i class="fa-solid fa-user-shield text-2xl"></i>
+            </div>
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-3">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Первоначальная настройка
+            </div>
+            <h1 class="text-2xl lg:text-3xl font-bold tracking-tight text-white">Создайте администратора</h1>
+            <p class="text-sm text-slate-400 mt-2 max-w-md mx-auto">
+                Задайте логин и пароль для вашей панели VPN Vault. Эти данные будут сохранены в базе на вашем сервере.
+            </p>
+        </div>
+
+        <form id="setupForm" class="relative z-10 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1.5">
+                    Логин администратора <span class="text-rose-400">*</span>
+                </label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-user text-sm"></i>
+                    </span>
+                    <input type="text" id="username" required minlength="3" placeholder="Например: admin или ваш логин" 
+                        class="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                </div>
+                <p class="text-[11px] text-slate-500 mt-1">Минимум 3 символа</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1.5">
+                    Пароль <span class="text-rose-400">*</span>
+                </label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-lock text-sm"></i>
+                    </span>
+                    <input type="password" id="password" required minlength="6" placeholder="Минимум 6 символов" 
+                        class="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1.5">
+                    Подтверждение пароля <span class="text-rose-400">*</span>
+                </label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-check-double text-sm"></i>
+                    </span>
+                    <input type="password" id="confirmPassword" required minlength="6" placeholder="Повторите введенный пароль" 
+                        class="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+                <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-slate-300">
+                    <input type="checkbox" id="showPasswordsToggle" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0">
+                    <span>Показать пароли</span>
+                </label>
+            </div>
+
+            <div id="errorBox" class="hidden p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm flex items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+                <span id="errorMessage">Ошибка</span>
+            </div>
+
+            <button type="submit" id="submitBtn" 
+                class="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200 flex items-center justify-center gap-2 mt-2">
+                <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                <span>Завершить настройку и войти</span>
+            </button>
+        </form>
+
+        <div class="relative z-10 mt-6 pt-6 border-t border-slate-800 text-center space-y-2">
+            <p class="text-xs text-slate-500">
+                🔒 Пароль сохраняется в зашифрованном виде (SHA-256 + Salt) в локальной SQLite базе сервера.
+            </p>
+            <p class="text-[11px] text-slate-600">
+                Поддерживаемые протоколы: VLESS • VMess • Shadowsocks • Hysteria 2 • Trojan
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const toggle = document.getElementById('showPasswordsToggle');
+        const pwdInput = document.getElementById('password');
+        const confirmInput = document.getElementById('confirmPassword');
+
+        toggle.addEventListener('change', () => {
+            const type = toggle.checked ? 'text' : 'password';
+            pwdInput.type = type;
+            confirmInput.type = type;
+        });
+
+        document.getElementById('setupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const errBox = document.getElementById('errorBox');
+            const errMsg = document.getElementById('errorMessage');
+
+            const username = document.getElementById('username').value.trim();
+            const password = pwdInput.value;
+            const confirmPassword = confirmInput.value;
+
+            if (username.length < 3) {
+                errMsg.innerText = 'Имя пользователя должно содержать не менее 3 символов';
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            if (password.length < 6) {
+                errMsg.innerText = 'Пароль должен содержать не менее 6 символов';
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                errMsg.innerText = 'Введенные пароли не совпадают!';
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            errBox.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Сохранение...';
+
+            try {
+                const res = await fetch('/api/auth/setup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        confirm_password: confirmPassword
+                    })
+                });
+
+                if (res.ok) {
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> Успешно! Переход...';
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json();
+                    errMsg.innerText = data.detail || 'Не удалось завершить настройку';
+                    errBox.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Попробовать снова';
+                }
+            } catch (err) {
+                errMsg.innerText = 'Сетевая ошибка при обращении к серверу';
+                errBox.classList.remove('hidden');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Попробовать снова';
+            }
+        });
+    </script>
+</body>
+</html>

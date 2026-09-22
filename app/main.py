@@ -57,8 +57,18 @@ app.include_router(sources_router)
 app.include_router(settings_router)
 app.include_router(sub_router)
 
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    from app.database import has_any_users
+    if await has_any_users():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+    return templates.TemplateResponse(request=request, name="setup.html")
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    from app.database import has_any_users
+    if not await has_any_users():
+        return RedirectResponse(url="/setup", status_code=status.HTTP_302_FOUND)
     user = await get_current_user_optional(request)
     if user:
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)

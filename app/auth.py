@@ -40,6 +40,19 @@ async def get_current_user_optional(request: Request) -> Optional[str]:
     return verify_session_token(token)
 
 async def require_auth(request: Request) -> str:
+    from app.database import has_any_users
+    if not await has_any_users():
+        if request.url.path.startswith("/api/"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Требуется первоначальная настройка администратора на /setup"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                headers={"Location": "/setup"}
+            )
+
     username = await get_current_user_optional(request)
     if not username:
         if request.url.path.startswith("/api/"):

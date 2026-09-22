@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     DB_PATH: str = str(DATA_DIR / "proxy_vault.db")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-key-vpn-aggregator-2026")
     
-    # Default admin credentials
-    DEFAULT_USERNAME: str = os.getenv("DEFAULT_USERNAME", "admin")
-    DEFAULT_PASSWORD: str = os.getenv("DEFAULT_PASSWORD", "admin")
+    # Initial admin credentials (optional: if empty, web setup wizard will prompt on first visit)
+    DEFAULT_USERNAME: str = os.getenv("DEFAULT_USERNAME", "")
+    DEFAULT_PASSWORD: str = os.getenv("DEFAULT_PASSWORD", "")
     
     # Scheduler defaults
     DEFAULT_PARSE_INTERVAL_HOURS: int = 12

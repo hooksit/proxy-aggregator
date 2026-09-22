@@ -114,17 +114,30 @@ def test_multi_extract():
     print(f"[OK] Multi-extract successfully found {len(configs)} configs")
 
 async def test_database():
-    from app.database import init_db, get_db_connection, get_setting, set_setting, verify_password
+    from app.database import init_db, get_db_connection, get_setting, set_setting, verify_password, has_any_users, hash_password
     await init_db()
     
-    # Check default user
-    from app.config import settings
+    # Test clean state
     async with get_db_connection() as db:
-        cur = await db.execute("SELECT username, password_hash FROM users WHERE username = ?", (settings.DEFAULT_USERNAME,))
+        await db.execute("DELETE FROM users")
+        await db.commit()
+
+    assert await has_any_users() is False
+    print("[OK] Verified clean state: has_any_users() is False")
+
+    # Simulate setup wizard user creation
+    async with get_db_connection() as db:
+        pw_hash = hash_password("MySecretPassword2026")
+        await db.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", ("superadmin", pw_hash))
+        await db.commit()
+
+    assert await has_any_users() is True
+    async with get_db_connection() as db:
+        cur = await db.execute("SELECT username, password_hash FROM users WHERE username = 'superadmin'")
         user = await cur.fetchone()
         assert user is not None
-        assert verify_password(settings.DEFAULT_PASSWORD, user["password_hash"])
-        print(f"[OK] Admin user '{settings.DEFAULT_USERNAME}' verified")
+        assert verify_password("MySecretPassword2026", user["password_hash"])
+        print("[OK] Admin user 'superadmin' successfully created and verified with hash")
 
     # Check default settings
     p_int = await get_setting("parse_interval_hours")
