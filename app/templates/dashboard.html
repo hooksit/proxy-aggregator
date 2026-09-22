@@ -425,32 +425,68 @@
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-        // Copy Helper
-        function copySubUrl(endpoint) {
-            const fullUrl = window.location.origin + endpoint;
-            navigator.clipboard.writeText(fullUrl).then(() => {
-                showToast(`Ссылка скопирована: ${fullUrl}`, 'success');
-            });
+        // Universal Clipboard Copy with Fallback (Works on HTTP & HTTPS)
+        function copyToClipboard(text, customSuccessMsg) {
+            if (!text) return;
+            const successText = customSuccessMsg || 'Скопировано в буфер обмена!';
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(successText, 'success');
+                }).catch(() => fallbackCopy(text, successText));
+            } else {
+                fallbackCopy(text, successText);
+            }
         }
 
-        function copyLinkText(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Конфиг скопирован в буфер обмена', 'success');
-            });
+        function fallbackCopy(text, successText) {
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const success = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (success) {
+                    showToast(successText, 'success');
+                } else {
+                    prompt("Скопируйте ссылку вручную (Ctrl+C, Enter):", text);
+                }
+            } catch (err) {
+                prompt("Скопируйте ссылку вручную (Ctrl+C, Enter):", text);
+            }
+        }
+
+        function copySubUrl(endpoint) {
+            const fullUrl = window.location.origin + endpoint;
+            copyToClipboard(fullUrl, `Ссылка подписки скопирована: ${endpoint}`);
+        }
+
+        function copyConfigById(id) {
+            const item = window.configsLookup && window.configsLookup[id];
+            if (item && item.raw_link) {
+                copyToClipboard(item.raw_link, 'Ссылка конфигурации скопирована!');
+            }
         }
 
         function copyCurrentQrLink() {
-            if (currentQrRawLink) copyLinkText(currentQrRawLink);
+            if (currentQrRawLink) copyToClipboard(currentQrRawLink, 'Ссылка скопирована!');
         }
 
         // QR Code Modal
-        function showQr(title, link) {
-            currentQrRawLink = link;
-            document.getElementById('qrTitle').innerText = title || 'QR-код конфигурации';
+        function showQrById(id) {
+            const item = window.configsLookup && window.configsLookup[id];
+            if (!item) return;
+            currentQrRawLink = item.raw_link;
+            document.getElementById('qrTitle').innerText = item.name || 'QR-код конфигурации';
             const qrDiv = document.getElementById('qrcode');
             qrDiv.innerHTML = '';
             new QRCode(qrDiv, {
-                text: link,
+                text: item.raw_link,
                 width: 220,
                 height: 220,
                 colorDark: "#000000",
@@ -459,6 +495,7 @@
             });
             openModal('qrModal');
         }
+
 
         // Filter Handlers
         function setProtocolFilter(proto) {
@@ -523,14 +560,8 @@
                 document.getElementById('valNextCheck').innerText = formatDate(data.timestamps.next_check);
 
                 // Update Speedtest toggle state
-                const stBadge = document.getElementById('speedtestStatusBadge');
-                if (data.flags.speedtest_enabled) {
-                    stBadge.innerText = 'ВКЛ';
-                    stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-                } else {
-                    stBadge.innerText = 'ВЫКЛ';
-                    stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-700 text-slate-300';
-                }
+                localStorage.setItem('speedtest_enabled', data.flags.speedtest_enabled ? '1' : '0');
+                updateSpeedtestBadge(data.flags.speedtest_enabled);
 
                 // Protocols badges
                 const protoDiv = document.getElementById('statProtocols');
@@ -551,13 +582,30 @@
             }
         }
 
+        function updateSpeedtestBadge(isEnabled) {
+            const stBadge = document.getElementById('speedtestStatusBadge');
+            if (!stBadge) return;
+            if (isEnabled) {
+                stBadge.innerText = 'ВКЛ';
+                stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            } else {
+                stBadge.innerText = 'ВЫКЛ';
+                stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-700 text-slate-300';
+            }
+        }
+
         // Toggle Speedtest
         async function toggleSpeedtest() {
             try {
                 const res = await fetch('/api/settings/speedtest-toggle', { method: 'POST' });
                 const data = await res.json();
-                showToast(`Замер скорости 50МБ: ${data.speedtest_enabled ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`, data.speedtest_enabled ? 'success' : 'info');
-                loadStats();
+                localStorage.setItem('speedtest_enabled', data.speedtest_enabled ? '1' : '0');
+                updateSpeedtestBadge(data.speedtest_enabled);
+                if (data.speedtest_enabled) {
+                    showToast('Замер скорости 50МБ: ВКЛЮЧЕН! Нажмите «Проверить» для замера скорости узлов.', 'success');
+                } else {
+                    showToast('Замер скорости 50МБ: ВЫКЛЮЧЕН', 'info');
+                }
             } catch (e) {
                 showToast('Ошибка переключения замера скорости', 'error');
             }
@@ -589,8 +637,10 @@
                     return;
                 }
 
+                window.configsLookup = {};
                 let html = '';
                 for (const item of data.items) {
+                    window.configsLookup[item.id] = item;
                     const isAlive = item.is_active === 1;
                     const ping = item.ping_ms;
                     
@@ -644,10 +694,10 @@
                                 ${formatDate(item.last_checked_at)}
                             </td>
                             <td class="py-3 px-4 text-right space-x-1">
-                                <button onclick="copyLinkText('${item.raw_link.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Копировать ссылку">
+                                <button onclick="copyConfigById(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Копировать ссылку">
                                     <i class="fa-regular fa-copy"></i>
                                 </button>
-                                <button onclick="showQr('${(item.name || '').replace(/'/g, "\\'")}', '${item.raw_link.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 transition" title="QR-код">
+                                <button onclick="showQrById(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 transition" title="QR-код">
                                     <i class="fa-solid fa-qrcode"></i>
                                 </button>
                                 <button onclick="checkSingle(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 transition" title="Перепроверить">
@@ -673,6 +723,7 @@
         }
 
         // Actions
+
         async function triggerImmediateParse() {
             showToast('Запуск парсера источников...', 'info');
             await fetch('/api/dashboard/trigger-parse', { method: 'POST' });
@@ -695,17 +746,22 @@
         }
 
         async function checkSingle(id) {
-            showToast(`Проверка конфига #${id}...`, 'info');
+            showToast(`Проверка узла #${id}...`, 'info');
             const res = await fetch(`/api/configs/${id}/check`, { method: 'POST' });
             const data = await res.json();
             if (data.is_alive) {
-                showToast(`Конфиг рабочий! Пинг: ${data.ping_ms} ms`, 'success');
+                let msg = `Узел рабочий! Пинг: ${data.ping_ms} ms`;
+                if (data.download_mbps > 0) {
+                    msg += ` • Скорость: D ${data.download_mbps} / U ${data.upload_mbps} Mbps`;
+                }
+                showToast(msg, 'success');
             } else {
-                showToast(`Конфиг недоступен: ${data.error || 'таймаут'}`, 'error');
+                showToast(`Узел недоступен: ${data.error || 'таймаут'}`, 'error');
             }
             loadConfigs();
             loadStats();
         }
+
 
         async function deleteConfig(id) {
             await fetch(`/api/configs/${id}`, { method: 'DELETE' });
@@ -882,6 +938,10 @@
 
         // Init on DOM ready
         window.addEventListener('DOMContentLoaded', () => {
+            const cachedSt = localStorage.getItem('speedtest_enabled');
+            if (cachedSt !== null) {
+                updateSpeedtestBadge(cachedSt === '1');
+            }
             loadStats();
             loadSettings();
             loadConfigs();
@@ -890,6 +950,7 @@
             // Auto-refresh stats every 15 seconds
             setInterval(loadStats, 15000);
         });
+
     </script>
 </body>
 </html>
