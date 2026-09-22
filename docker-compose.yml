@@ -1,0 +1,18 @@
+services:
+  vpn-aggregator:
+    build: .
+    container_name: vpn-vault-panel
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - DEFAULT_USERNAME=${DEFAULT_USERNAME:-admin}
+      - DEFAULT_PASSWORD=${DEFAULT_PASSWORD:-admin}
+      - DEFAULT_PARSE_INTERVAL_HOURS=12
+      - DEFAULT_CHECK_INTERVAL_MINUTES=5
+      - DEFAULT_SPEEDTEST_ENABLED=false
+      - TZ=UTC

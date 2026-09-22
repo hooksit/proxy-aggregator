@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPN Config Vault | Панель управления</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#090d16',
+                        card: '#111827',
+                        border: '#1f2937'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #090d16; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    </style>
+</head>
+<body class="bg-dark text-slate-100 min-h-screen flex flex-col font-sans">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-card/80 backdrop-blur-md border-b border-border sticky top-0 z-40 px-4 lg:px-8 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold text-lg shadow-inner">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-bold text-lg text-white leading-tight">VPN Config Vault</h1>
+                    <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Ubuntu 24.04</span>
+                </div>
+                <p class="text-xs text-slate-400">VLESS • VMess • SS • Hy2 • Trojan</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 sm:gap-4">
+            <!-- Speedtest 50MB Quick Toggle -->
+            <button id="speedtestToggleBtn" onclick="toggleSpeedtest()" 
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition duration-200 bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600">
+                <i class="fa-solid fa-gauge-high"></i>
+                <span class="hidden sm:inline">Замер скорости 50МБ:</span>
+                <span id="speedtestStatusBadge" class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-700 text-slate-300">ВЫКЛ</span>
+            </button>
+
+            <!-- Quick Action: Settings -->
+            <button onclick="openModal('settingsModal')" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Настройки расписания">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+
+            <!-- Quick Action: Sources -->
+            <button onclick="openModal('sourcesModal')" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Источники сбора">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+            </button>
+
+            <!-- Quick Action: Manual Add -->
+            <button onclick="openModal('manualAddModal')" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-md shadow-indigo-600/30 transition">
+                <i class="fa-solid fa-plus"></i>
+                <span class="hidden sm:inline">Добавить ссылки</span>
+            </button>
+
+            <!-- User Menu & Logout -->
+            <div class="flex items-center gap-2 border-l border-slate-800 pl-3">
+                <span class="text-xs text-slate-400 hidden md:inline font-mono">admin</span>
+                <button onclick="logout()" class="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition" title="Выйти">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+
+        <!-- Subscription URLs Banner -->
+        <div class="bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-800/40 rounded-2xl p-4 lg:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 text-xs">
+                        <i class="fa-solid fa-link"></i>
+                    </span>
+                    <h2 class="text-sm font-semibold text-white">Ссылки на авто-подписку рабочих конфигураций</h2>
+                </div>
+                <p class="text-xs text-slate-400">Конфигурации сортируются по минимальному пингу и обновляются каждые 5 минут в реальном времени.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="copySubUrl('/sub/raw')" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500 text-xs font-mono text-slate-200 transition">
+                    <i class="fa-regular fa-copy text-indigo-400"></i>
+                    <span>Raw Links</span>
+                </button>
+                <button onclick="copySubUrl('/sub/base64')" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500 text-xs font-mono text-slate-200 transition">
+                    <i class="fa-solid fa-file-code text-purple-400"></i>
+                    <span>Base64 Sub</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Metric Stat Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Card 1: Active Nodes -->
+            <div class="bg-card border border-border rounded-2xl p-5 relative overflow-hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Рабочие конфиги</span>
+                    <span class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </span>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span id="statActive" class="text-3xl font-extrabold text-white">0</span>
+                    <span class="text-xs text-slate-400">/ <span id="statTotal">0</span> всего</span>
+                </div>
+                <div id="statProtocols" class="mt-3 flex flex-wrap gap-1 text-[11px] text-slate-400">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Card 2: Parser Schedule -->
+            <div class="bg-card border border-border rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Парсер ссылок</span>
+                    <button onclick="triggerImmediateParse()" id="btnTriggerParse" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium transition" title="Собрать сейчас">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>Собрать</span>
+                    </button>
+                </div>
+                <div class="text-xs text-slate-300 space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Интервал:</span>
+                        <span id="valParseInterval" class="font-semibold text-white">12 ч.</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Обновлено:</span>
+                        <span id="valLastParse" class="text-slate-200">--:--</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Следующий:</span>
+                        <span id="valNextParse" class="text-indigo-400">--:--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Checker Schedule -->
+            <div class="bg-card border border-border rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Чекер пинга</span>
+                    <button onclick="triggerImmediateCheck()" id="btnTriggerCheck" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition" title="Проверить сейчас">
+                        <i class="fa-solid fa-bolt"></i>
+                        <span>Проверить</span>
+                    </button>
+                </div>
+                <div class="text-xs text-slate-300 space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Интервал:</span>
+                        <span id="valCheckInterval" class="font-semibold text-white">5 мин.</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Проверено:</span>
+                        <span id="valLastCheck" class="text-slate-200">--:--</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Следующий:</span>
+                        <span id="valNextCheck" class="text-emerald-400">--:--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: Added & Purged -->
+            <div class="bg-card border border-border rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ротация (24ч)</span>
+                    <button onclick="clearDeadConfigs()" class="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-medium transition" title="Удалить нерабочие">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Очистить</span>
+                    </button>
+                </div>
+                <div class="text-xs text-slate-300 space-y-1.5 mt-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Добавлено новых:</span>
+                        <span id="statAdded24" class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold">+0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Удалено мертвых:</span>
+                        <span id="statPurged24" class="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-semibold">-0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Controls Bar -->
+        <div class="bg-card border border-border rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <!-- Protocols filter buttons -->
+            <div class="flex flex-wrap items-center gap-1.5 w-full md:w-auto" id="protocolFilters">
+                <button onclick="setProtocolFilter('all')" data-proto="all" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-indigo-600 text-white transition">Все</button>
+                <button onclick="setProtocolFilter('vless')" data-proto="vless" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">VLESS</button>
+                <button onclick="setProtocolFilter('vmess')" data-proto="vmess" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">VMess</button>
+                <button onclick="setProtocolFilter('shadowsocks')" data-proto="shadowsocks" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Shadowsocks</button>
+                <button onclick="setProtocolFilter('hysteria2')" data-proto="hysteria2" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Hysteria 2</button>
+                <button onclick="setProtocolFilter('trojan')" data-proto="trojan" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Trojan</button>
+            </div>
+
+            <!-- Status and Search controls -->
+            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                <select id="statusFilter" onchange="loadConfigs()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+                    <option value="active">Только рабочие</option>
+                    <option value="dead">Нерабочие</option>
+                    <option value="all">Все конфигурации</option>
+                </select>
+
+                <select id="sortByFilter" onchange="loadConfigs()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
+                    <option value="ping">Сортировка: Пинг (min)</option>
+                    <option value="speed">Сортировка: Скорость (max)</option>
+                    <option value="date">Сортировка: Новые</option>
+                </select>
+
+                <div class="relative w-full sm:w-48">
+                    <input type="text" id="searchInput" oninput="debounceLoadConfigs()" placeholder="Поиск сервера..." 
+                        class="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-500 text-xs"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configurations Table -->
+        <div class="bg-card border border-border rounded-2xl overflow-hidden shadow-xl">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-border bg-slate-900/60 text-slate-400 text-xs uppercase font-semibold">
+                            <th class="py-3 px-4">Статус</th>
+                            <th class="py-3 px-4">Протокол</th>
+                            <th class="py-3 px-4">Сервер / Порт</th>
+                            <th class="py-3 px-4">Название</th>
+                            <th class="py-3 px-4">Пинг</th>
+                            <th class="py-3 px-4">Скорость (D/U)</th>
+                            <th class="py-3 px-4">Проверено</th>
+                            <th class="py-3 px-4 text-right">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="configsTableBody" class="divide-y divide-border text-xs text-slate-300">
+                        <tr>
+                            <td colspan="8" class="text-center py-12 text-slate-500">
+                                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-indigo-500"></i>
+                                <div>Загрузка конфигураций...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table Pagination -->
+            <div class="p-4 border-t border-border flex items-center justify-between text-xs text-slate-400">
+                <div>Показано: <span id="paginationInfo" class="font-medium text-slate-200">0</span></div>
+                <div class="flex items-center gap-2">
+                    <button id="prevPageBtn" onclick="changePage(-1)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 transition">Назад</button>
+                    <span id="currentPageNum" class="px-2 font-mono text-slate-200">1</span>
+                    <button id="nextPageBtn" onclick="changePage(1)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 transition">Вперед</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal: Settings (Timers & Speedtest) -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-card border border-border w-full max-w-md rounded-2xl p-6 space-y-5 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-border pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-indigo-400"></i>
+                    <span>Настройки расписания</span>
+                </h3>
+                <button onclick="closeModal('settingsModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form id="settingsForm" onsubmit="saveSettings(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Интервал сбора ссылок (в часах)</label>
+                    <input type="number" id="settingParseHours" min="1" max="168" value="12" required
+                        class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">По умолчанию: 12 часов</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Интервал проверки живых конфигов (в минутах)</label>
+                    <input type="number" id="settingCheckMinutes" min="1" max="1440" value="5" required
+                        class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">По умолчанию: 5 минут</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Удалять нерабочие после (неудачных проверок)</label>
+                    <input type="number" id="settingMaxRetries" min="1" max="10" value="3" required
+                        class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">По умолчанию: 3 проверки (15 минут без ответа)</p>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('settingsModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300 hover:bg-slate-700">Отмена</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white shadow-lg shadow-indigo-600/30">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Sources Management -->
+    <div id="sourcesModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-card border border-border w-full max-w-2xl rounded-2xl p-6 space-y-5 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-border pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-down text-indigo-400"></i>
+                    <span>Источники для парсера</span>
+                </h3>
+                <button onclick="closeModal('sourcesModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Add Source Form -->
+            <form id="addSourceForm" onsubmit="addSource(event)" class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-border">
+                <div class="text-xs font-medium text-slate-200">Добавить новый источник</div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input type="text" id="newSourceName" placeholder="Название (например: NiREvil GitHub)" required
+                        class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+                    <input type="text" id="newSourceUrl" placeholder="URL подписки / Telegram t.me/s/... / GitHub" required
+                        class="sm:col-span-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium">
+                        Добавить и спарсить
+                    </button>
+                </div>
+            </form>
+
+            <!-- Sources List -->
+            <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar" id="sourcesListContainer">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Manual Add Configs -->
+    <div id="manualAddModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-card border border-border w-full max-w-xl rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-border pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-indigo-400"></i>
+                    <span>Добавить конфигурации вручную</span>
+                </h3>
+                <button onclick="closeModal('manualAddModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <p class="text-xs text-slate-400">Вставьте готовые ссылки (vless://, vmess://, ss://, hy2://, trojan://) или base64 подписку:</p>
+
+            <textarea id="manualAddContent" rows="8" placeholder="vless://...&#10;vmess://...&#10;ss://...&#10;hy2://..." 
+                class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"></textarea>
+
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeModal('manualAddModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300 hover:bg-slate-700">Отмена</button>
+                <button type="button" onclick="submitManualConfigs()" id="btnSubmitManual" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white shadow-lg shadow-indigo-600/30">
+                    Добавить в базу
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: QR Code -->
+    <div id="qrModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-card border border-border w-full max-w-sm rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-border pb-2">
+                <h3 class="text-sm font-bold text-white" id="qrTitle">QR-код подключения</h3>
+                <button onclick="closeModal('qrModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="bg-white p-4 rounded-2xl inline-block mx-auto shadow-inner" id="qrcode"></div>
+            <p class="text-xs text-slate-400">Отсканируйте камерой в V2RayNG, Shadowrocket, Streisand или Hiddify</p>
+            <div class="pt-2">
+                <button onclick="copyCurrentQrLink()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-xs text-indigo-400 font-mono rounded-xl border border-slate-700">
+                    <i class="fa-regular fa-copy mr-1"></i> Копировать ссылку
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        let currentProtocol = 'all';
+        let currentPage = 0;
+        const PAGE_SIZE = 40;
+        let debounceTimer = null;
+        let currentQrRawLink = '';
+
+        // Toast Helper
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-indigo-600';
+            toast.className = `${bg} text-white px-4 py-2.5 rounded-xl shadow-2xl text-xs font-medium flex items-center gap-2 transform transition-all duration-300 pointer-events-auto`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-info'}"></i> <span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Modal Helpers
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // Copy Helper
+        function copySubUrl(endpoint) {
+            const fullUrl = window.location.origin + endpoint;
+            navigator.clipboard.writeText(fullUrl).then(() => {
+                showToast(`Ссылка скопирована: ${fullUrl}`, 'success');
+            });
+        }
+
+        function copyLinkText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Конфиг скопирован в буфер обмена', 'success');
+            });
+        }
+
+        function copyCurrentQrLink() {
+            if (currentQrRawLink) copyLinkText(currentQrRawLink);
+        }
+
+        // QR Code Modal
+        function showQr(title, link) {
+            currentQrRawLink = link;
+            document.getElementById('qrTitle').innerText = title || 'QR-код конфигурации';
+            const qrDiv = document.getElementById('qrcode');
+            qrDiv.innerHTML = '';
+            new QRCode(qrDiv, {
+                text: link,
+                width: 220,
+                height: 220,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+            openModal('qrModal');
+        }
+
+        // Filter Handlers
+        function setProtocolFilter(proto) {
+            currentProtocol = proto;
+            document.querySelectorAll('.proto-btn').forEach(btn => {
+                if (btn.dataset.proto === proto) {
+                    btn.classList.add('bg-indigo-600', 'text-white');
+                    btn.classList.remove('bg-slate-800', 'text-slate-300');
+                } else {
+                    btn.classList.remove('bg-indigo-600', 'text-white');
+                    btn.classList.add('bg-slate-800', 'text-slate-300');
+                }
+            });
+            currentPage = 0;
+            loadConfigs();
+        }
+
+        function debounceLoadConfigs() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                currentPage = 0;
+                loadConfigs();
+            }, 300);
+        }
+
+        function changePage(delta) {
+            currentPage = Math.max(0, currentPage + delta);
+            loadConfigs();
+        }
+
+        // Format Date
+        function formatDate(isoStr) {
+            if (!isoStr) return '--:--';
+            try {
+                const d = new Date(isoStr);
+                return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' +
+                       d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+            } catch {
+                return isoStr;
+            }
+        }
+
+        // Load Dashboard Stats
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/dashboard/stats');
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await res.json();
+
+                document.getElementById('statActive').innerText = data.counts.active;
+                document.getElementById('statTotal').innerText = data.counts.total;
+                document.getElementById('statAdded24').innerText = `+${data.counts.added_last_24h}`;
+                document.getElementById('statPurged24').innerText = `-${data.counts.purged_last_24h}`;
+
+                // Update timestamps
+                document.getElementById('valLastParse').innerText = formatDate(data.timestamps.last_parse);
+                document.getElementById('valNextParse').innerText = formatDate(data.timestamps.next_parse);
+                document.getElementById('valLastCheck').innerText = formatDate(data.timestamps.last_check);
+                document.getElementById('valNextCheck').innerText = formatDate(data.timestamps.next_check);
+
+                // Update Speedtest toggle state
+                const stBadge = document.getElementById('speedtestStatusBadge');
+                if (data.flags.speedtest_enabled) {
+                    stBadge.innerText = 'ВКЛ';
+                    stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                } else {
+                    stBadge.innerText = 'ВЫКЛ';
+                    stBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-700 text-slate-300';
+                }
+
+                // Protocols badges
+                const protoDiv = document.getElementById('statProtocols');
+                protoDiv.innerHTML = '';
+                for (const [proto, count] of Object.entries(data.counts.protocols || {})) {
+                    protoDiv.innerHTML += `<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 font-mono text-[10px]">${proto.toUpperCase()}: ${count}</span>`;
+                }
+
+                // If running, show spin on buttons
+                const btnParse = document.getElementById('btnTriggerParse');
+                btnParse.innerHTML = data.flags.is_parsing_now ? '<i class="fa-solid fa-spinner fa-spin"></i> Сборка...' : '<i class="fa-solid fa-arrows-rotate"></i> Собрать';
+                
+                const btnCheck = document.getElementById('btnTriggerCheck');
+                btnCheck.innerHTML = data.flags.is_checking_now ? '<i class="fa-solid fa-spinner fa-spin"></i> Чек...' : '<i class="fa-solid fa-bolt"></i> Проверить';
+
+            } catch (e) {
+                console.error('Failed to load stats', e);
+            }
+        }
+
+        // Toggle Speedtest
+        async function toggleSpeedtest() {
+            try {
+                const res = await fetch('/api/settings/speedtest-toggle', { method: 'POST' });
+                const data = await res.json();
+                showToast(`Замер скорости 50МБ: ${data.speedtest_enabled ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`, data.speedtest_enabled ? 'success' : 'info');
+                loadStats();
+            } catch (e) {
+                showToast('Ошибка переключения замера скорости', 'error');
+            }
+        }
+
+        // Load Configs Table
+        async function loadConfigs() {
+            const status = document.getElementById('statusFilter').value;
+            const sortBy = document.getElementById('sortByFilter').value;
+            const search = document.getElementById('searchInput').value.trim();
+            const offset = currentPage * PAGE_SIZE;
+
+            const tbody = document.getElementById('configsTableBody');
+
+            try {
+                const url = `/api/configs?status=${status}&protocol=${currentProtocol}&sort_by=${sortBy}&search=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${offset}`;
+                const res = await fetch(url);
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await res.json();
+
+                if (!data.items || data.items.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-500">Конфигурации не найдены</td></tr>`;
+                    document.getElementById('paginationInfo').innerText = '0 из 0';
+                    document.getElementById('prevPageBtn').disabled = true;
+                    document.getElementById('nextPageBtn').disabled = true;
+                    return;
+                }
+
+                let html = '';
+                for (const item of data.items) {
+                    const isAlive = item.is_active === 1;
+                    const ping = item.ping_ms;
+                    
+                    let pingBadge = `<span class="text-slate-500 font-mono">--</span>`;
+                    if (isAlive && ping > 0) {
+                        const colorClass = ping < 150 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' :
+                                           ping < 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/30' :
+                                                        'text-rose-400 bg-rose-500/10 border-rose-500/30';
+                        pingBadge = `<span class="px-2 py-0.5 rounded-full border text-[11px] font-mono font-bold ${colorClass}">${ping} ms</span>`;
+                    } else if (!isAlive) {
+                        pingBadge = `<span class="px-2 py-0.5 rounded-full border text-[11px] font-mono bg-rose-500/10 text-rose-400 border-rose-500/20">FAIL</span>`;
+                    }
+
+                    // Speed format
+                    const down = item.download_mbps ? `${item.download_mbps} M` : '--';
+                    const up = item.upload_mbps ? `${item.upload_mbps} M` : '--';
+                    const speedBadge = item.download_mbps > 0 
+                        ? `<span class="font-mono text-[11px] text-indigo-400"><i class="fa-solid fa-arrow-down text-[10px]"></i> ${down} <span class="text-slate-600">/</span> <i class="fa-solid fa-arrow-up text-[10px]"></i> ${up}</span>`
+                        : `<span class="text-slate-500 font-mono text-[11px]">--</span>`;
+
+                    // Protocol badge
+                    const protoColor = {
+                        'vless': 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+                        'vmess': 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+                        'shadowsocks': 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+                        'hysteria2': 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+                        'trojan': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                    }[item.protocol.toLowerCase()] || 'bg-slate-700 text-slate-300';
+
+                    html += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="py-3 px-4">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block ${isAlive ? 'bg-emerald-500 shadow-sm shadow-emerald-500' : 'bg-rose-500'}"></span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase font-mono ${protoColor}">${item.protocol}</span>
+                            </td>
+                            <td class="py-3 px-4 font-mono text-slate-200">
+                                ${item.server}:${item.port}
+                            </td>
+                            <td class="py-3 px-4 max-w-xs truncate text-slate-400" title="${item.name || ''}">
+                                ${item.name || '--'}
+                            </td>
+                            <td class="py-3 px-4">
+                                ${pingBadge}
+                            </td>
+                            <td class="py-3 px-4">
+                                ${speedBadge}
+                            </td>
+                            <td class="py-3 px-4 text-slate-400 text-[11px]">
+                                ${formatDate(item.last_checked_at)}
+                            </td>
+                            <td class="py-3 px-4 text-right space-x-1">
+                                <button onclick="copyLinkText('${item.raw_link.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Копировать ссылку">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                                <button onclick="showQr('${(item.name || '').replace(/'/g, "\\'")}', '${item.raw_link.replace(/'/g, "\\'")}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 transition" title="QR-код">
+                                    <i class="fa-solid fa-qrcode"></i>
+                                </button>
+                                <button onclick="checkSingle(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 transition" title="Перепроверить">
+                                    <i class="fa-solid fa-play text-[10px]"></i>
+                                </button>
+                                <button onclick="deleteConfig(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-rose-400 transition" title="Удалить">
+                                    <i class="fa-solid fa-trash-can text-[10px]"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                tbody.innerHTML = html;
+
+                document.getElementById('paginationInfo').innerText = `${offset + 1} - ${Math.min(offset + PAGE_SIZE, data.total)} из ${data.total}`;
+                document.getElementById('currentPageNum').innerText = currentPage + 1;
+                document.getElementById('prevPageBtn').disabled = currentPage === 0;
+                document.getElementById('nextPageBtn').disabled = offset + PAGE_SIZE >= data.total;
+
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-400">Ошибка загрузки таблицы</td></tr>`;
+            }
+        }
+
+        // Actions
+        async function triggerImmediateParse() {
+            showToast('Запуск парсера источников...', 'info');
+            await fetch('/api/dashboard/trigger-parse', { method: 'POST' });
+            setTimeout(() => { loadStats(); loadConfigs(); }, 1500);
+        }
+
+        async function triggerImmediateCheck() {
+            showToast('Запуск проверки конфигураций...', 'info');
+            await fetch('/api/dashboard/trigger-check', { method: 'POST' });
+            setTimeout(() => { loadStats(); loadConfigs(); }, 1500);
+        }
+
+        async function clearDeadConfigs() {
+            if (!confirm('Удалить все нерабочие конфигурации из базы?')) return;
+            const res = await fetch('/api/configs/dead', { method: 'DELETE' });
+            const data = await res.json();
+            showToast(`Удалено конфигураций: ${data.deleted}`, 'success');
+            loadStats();
+            loadConfigs();
+        }
+
+        async function checkSingle(id) {
+            showToast(`Проверка конфига #${id}...`, 'info');
+            const res = await fetch(`/api/configs/${id}/check`, { method: 'POST' });
+            const data = await res.json();
+            if (data.is_alive) {
+                showToast(`Конфиг рабочий! Пинг: ${data.ping_ms} ms`, 'success');
+            } else {
+                showToast(`Конфиг недоступен: ${data.error || 'таймаут'}`, 'error');
+            }
+            loadConfigs();
+            loadStats();
+        }
+
+        async function deleteConfig(id) {
+            await fetch(`/api/configs/${id}`, { method: 'DELETE' });
+            showToast(`Конфиг #${id} удален`, 'info');
+            loadConfigs();
+            loadStats();
+        }
+
+        // Sources Management
+        async function loadSources() {
+            const container = document.getElementById('sourcesListContainer');
+            try {
+                const res = await fetch('/api/sources');
+                const data = await res.json();
+                if (!data.sources || data.sources.length === 0) {
+                    container.innerHTML = `<div class="text-center py-4 text-slate-500 text-xs">Нет добавленных источников</div>`;
+                    return;
+                }
+
+                let html = '';
+                for (const s of data.sources) {
+                    html += `
+                        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-3 flex items-center justify-between text-xs">
+                            <div class="space-y-0.5 max-w-md truncate">
+                                <div class="font-semibold text-white flex items-center gap-2">
+                                    <span>${s.name}</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-700 text-slate-400 font-mono">${s.source_type}</span>
+                                </div>
+                                <div class="text-[11px] font-mono text-slate-400 truncate">${s.url}</div>
+                                <div class="text-[10px] text-slate-500">Найдено: ${s.configs_found} • Статус: ${s.last_status}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="scrapeSource(${s.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 text-xs">
+                                    <i class="fa-solid fa-arrows-rotate mr-1"></i> Спарсить
+                                </button>
+                                <button onclick="deleteSource(${s.id})" class="p-1.5 rounded-lg text-slate-500 hover:text-rose-400">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            } catch (e) {
+                container.innerHTML = `<div class="text-rose-400 text-xs">Ошибка загрузки источников</div>`;
+            }
+        }
+
+        async function addSource(e) {
+            e.preventDefault();
+            const name = document.getElementById('newSourceName').value;
+            const url = document.getElementById('newSourceUrl').value;
+            
+            showToast('Добавление и парсинг источника...', 'info');
+            const res = await fetch('/api/sources', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, url })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                showToast(data.message, 'success');
+                document.getElementById('newSourceName').value = '';
+                document.getElementById('newSourceUrl').value = '';
+                loadSources();
+                loadStats();
+                loadConfigs();
+            } else {
+                const err = await res.json();
+                showToast(err.detail || 'Ошибка добавления', 'error');
+            }
+        }
+
+        async function scrapeSource(id) {
+            showToast('Сборка источника...', 'info');
+            const res = await fetch(`/api/sources/${id}/scrape`, { method: 'POST' });
+            const data = await res.json();
+            showToast(`Найдено: ${data.found}, новых добавлено: ${data.added}`, 'success');
+            loadSources();
+            loadStats();
+            loadConfigs();
+        }
+
+        async function deleteSource(id) {
+            if (!confirm('Удалить этот источник?')) return;
+            await fetch(`/api/sources/${id}`, { method: 'DELETE' });
+            showToast('Источник удален', 'info');
+            loadSources();
+        }
+
+        // Manual Add Configs
+        async function submitManualConfigs() {
+            const content = document.getElementById('manualAddContent').value.trim();
+            if (!content) return;
+
+            const btn = document.getElementById('btnSubmitManual');
+            btn.disabled = true;
+            btn.innerText = 'Добавление...';
+
+            try {
+                const res = await fetch('/api/configs/manual', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ content })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    showToast(data.message, 'success');
+                    document.getElementById('manualAddContent').value = '';
+                    closeModal('manualAddModal');
+                    loadStats();
+                    loadConfigs();
+                } else {
+                    showToast('Ошибка при добавлении', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Добавить в базу';
+            }
+        }
+
+        // Settings Modal
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                document.getElementById('settingParseHours').value = data.parse_interval_hours;
+                document.getElementById('settingCheckMinutes').value = data.check_interval_minutes;
+                document.getElementById('settingMaxRetries').value = data.max_retries_before_purge;
+                document.getElementById('valParseInterval').innerText = `${data.parse_interval_hours} ч.`;
+                document.getElementById('valCheckInterval').innerText = `${data.check_interval_minutes} мин.`;
+            } catch (e) {
+                console.error('Failed to load settings', e);
+            }
+        }
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            const parseHours = parseInt(document.getElementById('settingParseHours').value);
+            const checkMinutes = parseInt(document.getElementById('settingCheckMinutes').value);
+            const maxRetries = parseInt(document.getElementById('settingMaxRetries').value);
+
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    parse_interval_hours: parseHours,
+                    check_interval_minutes: checkMinutes,
+                    max_retries_before_purge: maxRetries
+                })
+            });
+
+            if (res.ok) {
+                showToast('Настройки расписания сохранены', 'success');
+                closeModal('settingsModal');
+                loadSettings();
+                loadStats();
+            } else {
+                showToast('Ошибка сохранения', 'error');
+            }
+        }
+
+        // Logout
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        // Init on DOM ready
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadSettings();
+            loadConfigs();
+            loadSources();
+
+            // Auto-refresh stats every 15 seconds
+            setInterval(loadStats, 15000);
+        });
+    </script>
+</body>
+</html>
