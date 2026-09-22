@@ -89,21 +89,65 @@ async def run_full_parse_cycle() -> Dict[str, Any]:
 
     return summary
 
-async def add_manual_configs(raw_text: str) -> Dict[str, Any]:
-    """Parse and add manually pasted configurations."""
-    configs = extract_configs_from_text(raw_text)
-    if not configs:
-        # Try checking line by line in case URLs have slight whitespace
-        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-        for line in lines:
-            c = parse_single_link(line)
-            if c:
-                configs.append(c)
+async def add_manual_configs(raw_text: str, save_as_source: bool = False) -> Dict[str, Any]:
+    """
+    Parse and add configurations. 
+    Supports:
+    1. Direct proxy links (vless://, vmess://, etc.)
+    2. Base64 subscriptions
+    3. URLs to subscriptions or channels (http://, https://, t.me/...) with auto-fetch!
+    """
+    configs = []
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    sources_saved = 0
+    non_url_text = []
+
+    for line in lines:
+        if line.startswith("http://") or line.startswith("https://") or line.startswith("t.me/"):
+            try:
+                # Fetch remote content
+                content = await fetch_source_content(line)
+                fetched = extract_configs_from_text(content)
+                configs.extend(fetched)
+
+                # Optionally save URL to persistent sources for 12h auto-scrape
+                if save_as_source:
+                    async with get_db_connection() as db:
+                        try:
+                            s_name = f"Подписка {line[:30]}..."
+                            s_type = "telegram" if "t.me" in line else "sub"
+                            await db.execute(
+                                "INSERT OR IGNORE INTO sources (name, url, source_type) VALUES (?, ?, ?)",
+                                (s_name, line, s_type)
+                            )
+                            await db.commit()
+                            sources_saved += 1
+                        except Exception:
+                            pass
+            except Exception as e:
+                pass
+        else:
+            non_url_text.append(line)
+
+    if non_url_text:
+        combined = "\n".join(non_url_text)
+        direct_configs = extract_configs_from_text(combined)
+        if not direct_configs:
+            for l in non_url_text:
+                c = parse_single_link(l)
+                if c:
+                    direct_configs.append(c)
+        configs.extend(direct_configs)
+
+    # De-duplicate configs in this batch
+    unique_configs = {}
+    for c in configs:
+        unique_configs[c.hash] = c
 
     added = 0
     now_iso = datetime.utcnow().isoformat()
     async with get_db_connection() as db:
-        for cfg in configs:
+        for cfg in unique_configs.values():
             cursor = await db.execute("""
                 INSERT OR IGNORE INTO configs 
                 (hash, protocol, server, port, name, raw_link, is_active, source_id, created_at)
@@ -116,4 +160,9 @@ async def add_manual_configs(raw_text: str) -> Dict[str, Any]:
                 added += 1
         await db.commit()
 
-    return {"total_parsed": len(configs), "new_added": added}
+    return {
+        "total_parsed": len(unique_configs),
+        "new_added": added,
+        "sources_saved": sources_saved
+    }
+

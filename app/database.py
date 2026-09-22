@@ -125,9 +125,9 @@ async def init_db():
 
         # Seed default sources (NiREvil/vless repo sources)
         initial_sources = [
-            ("NiREvil Mix VLESS/VMess/Trojan", "https://raw.githubusercontent.com/NiREvil/vless/main/sub/mix", "sub"),
-            ("NiREvil Split VLESS", "https://raw.githubusercontent.com/NiREvil/vless/main/sub/split/vless", "sub"),
+            ("NiREvil SSTime (VLESS/SS/Trojan)", "https://raw.githubusercontent.com/NiREvil/vless/main/sub/SSTime", "sub"),
         ]
+
         for name, url, s_type in initial_sources:
             await db.execute(
                 "INSERT OR IGNORE INTO sources (name, url, source_type) VALUES (?, ?, ?)",

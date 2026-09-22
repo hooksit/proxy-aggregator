@@ -13,6 +13,8 @@ router = APIRouter(prefix="/api/configs", tags=["configs"])
 
 class ManualAddRequest(BaseModel):
     content: str
+    save_as_source: Optional[bool] = False
+
 
 @router.get("")
 async def get_configs(
@@ -84,11 +86,16 @@ async def add_manual(req: ManualAddRequest, user: str = Depends(require_auth)):
     if not req.content.strip():
         raise HTTPException(status_code=400, detail="Текст пуст")
     
-    result = await add_manual_configs(req.content)
+    result = await add_manual_configs(req.content, save_as_source=req.save_as_source or False)
+    msg = f"Распознано: {result['total_parsed']}, добавлено новых: {result['new_added']}"
+    if result.get("sources_saved"):
+        msg += f" (сохранено в источники: {result['sources_saved']})"
+        
     return {
         "status": "ok",
-        "message": f"Распознано: {result['total_parsed']}, добавлено новых: {result['new_added']}"
+        "message": msg
     }
+
 
 @router.delete("/dead")
 async def clear_dead_configs(user: str = Depends(require_auth)):

@@ -351,24 +351,34 @@
             <div class="flex items-center justify-between border-b border-border pb-3">
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-plus text-indigo-400"></i>
-                    <span>Добавить конфигурации вручную</span>
+                    <span>Добавить конфигурации или ссылку на подписку</span>
                 </h3>
                 <button onclick="closeModal('manualAddModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <p class="text-xs text-slate-400">Вставьте готовые ссылки (vless://, vmess://, ss://, hy2://, trojan://) или base64 подписку:</p>
+            <p class="text-xs text-slate-300">
+                Сюда можно вставлять как <b>ссылку на подписку</b> (<code class="text-indigo-400">https://...</code> или <code class="text-indigo-400">t.me/s/...</code>), так и список отдельных конфигов (<code class="text-slate-400">vless://, vmess://, ss://, hy2://, trojan://, Base64</code>). Сервис автоматически скачает всё содержимое и распознает серверы:
+            </p>
 
-            <textarea id="manualAddContent" rows="8" placeholder="vless://...&#10;vmess://...&#10;ss://...&#10;hy2://..." 
+            <textarea id="manualAddContent" rows="8" placeholder="https://raw.githubusercontent.com/.../sub&#10;https://t.me/s/channel_name&#10;vless://...&#10;vmess://..." 
                 class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"></textarea>
 
-            <div class="flex justify-end gap-2">
+            <div class="flex items-center justify-between pt-1">
+                <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                    <input type="checkbox" id="saveAsSourceCheck" checked class="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-0">
+                    <span>Сохранять URL в источники (для авто-обновления каждые 12 ч.)</span>
+                </label>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t border-border">
                 <button type="button" onclick="closeModal('manualAddModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300 hover:bg-slate-700">Отмена</button>
                 <button type="button" onclick="submitManualConfigs()" id="btnSubmitManual" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white shadow-lg shadow-indigo-600/30">
-                    Добавить в базу
+                    Распознать и добавить
                 </button>
             </div>
         </div>
     </div>
+
 
     <!-- Modal: QR Code -->
     <div id="qrModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -792,15 +802,16 @@
             const content = document.getElementById('manualAddContent').value.trim();
             if (!content) return;
 
+            const saveAsSource = document.getElementById('saveAsSourceCheck').checked;
             const btn = document.getElementById('btnSubmitManual');
             btn.disabled = true;
-            btn.innerText = 'Добавление...';
+            btn.innerText = 'Загрузка и парсинг...';
 
             try {
                 const res = await fetch('/api/configs/manual', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ content })
+                    body: JSON.stringify({ content, save_as_source: saveAsSource })
                 });
 
                 if (res.ok) {
@@ -810,14 +821,17 @@
                     closeModal('manualAddModal');
                     loadStats();
                     loadConfigs();
+                    loadSources();
                 } else {
-                    showToast('Ошибка при добавлении', 'error');
+                    const err = await res.json();
+                    showToast(err.detail || 'Ошибка при добавлении', 'error');
                 }
             } finally {
                 btn.disabled = false;
-                btn.innerText = 'Добавить в базу';
+                btn.innerText = 'Распознать и добавить';
             }
         }
+
 
         // Settings Modal
         async function loadSettings() {
