@@ -15,4 +15,4 @@ services:
       - DEFAULT_PARSE_INTERVAL_HOURS=12
       - DEFAULT_CHECK_INTERVAL_MINUTES=5
       - DEFAULT_SPEEDTEST_ENABLED=false
-      - TZ=UTC
+      - TZ=Europe/Moscow

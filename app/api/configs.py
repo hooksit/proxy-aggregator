@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ from app.database import get_db_connection, get_setting
 from app.core.scraper import add_manual_configs
 from app.core.parser import parse_single_link
 from app.core.tester import test_single_proxy
+
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 router = APIRouter(prefix="/api/configs", tags=["configs"])
 
@@ -132,7 +135,7 @@ async def check_single_config(config_id: int, user: str = Depends(require_auth))
 
     is_alive, ping, down, up, down_b, up_b, err = await test_single_proxy(cfg, enable_speedtest=enable_speedtest)
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(MOSCOW_TZ).isoformat()
     async with get_db_connection() as db:
         if is_alive:
             await db.execute("""

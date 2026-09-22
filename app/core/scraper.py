@@ -1,10 +1,13 @@
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, List
 import json
 
 from app.core.parser import fetch_source_content, extract_configs_from_text, parse_single_link
 from app.database import get_db_connection
+
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 async def scrape_single_source(source_id: int, url: str) -> Dict[str, Any]:
     stats = {"found": 0, "added": 0, "status": "ok", "error": None}
@@ -13,7 +16,7 @@ async def scrape_single_source(source_id: int, url: str) -> Dict[str, Any]:
         configs = extract_configs_from_text(content)
         stats["found"] = len(configs)
         
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(MOSCOW_TZ).isoformat()
         async with get_db_connection() as db:
             added = 0
             for cfg in configs:
@@ -41,7 +44,7 @@ async def scrape_single_source(source_id: int, url: str) -> Dict[str, Any]:
     except Exception as e:
         stats["status"] = "error"
         stats["error"] = str(e)
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(MOSCOW_TZ).isoformat()
         async with get_db_connection() as db:
             await db.execute("""
                 UPDATE sources 
@@ -73,7 +76,7 @@ async def run_full_parse_cycle() -> Dict[str, Any]:
         if res["status"] != "ok":
             summary["errors"] += 1
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(MOSCOW_TZ).isoformat()
     duration = round(time.perf_counter() - start_time, 2)
 
     async with get_db_connection() as db:

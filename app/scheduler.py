@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -7,7 +8,8 @@ from app.database import get_setting
 from app.core.scraper import run_full_parse_cycle
 from app.core.tester import run_full_check_cycle
 
-scheduler = AsyncIOScheduler()
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
+scheduler = AsyncIOScheduler(timezone=MOSCOW_TZ)
 
 PARSE_JOB_ID = "periodic_parse_job"
 CHECK_JOB_ID = "periodic_check_job"

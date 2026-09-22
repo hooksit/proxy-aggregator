@@ -4,6 +4,7 @@ import tempfile
 import os
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any, Tuple
 import httpx
 
@@ -12,6 +13,8 @@ from app.core.singbox import build_singbox_outbound, build_singbox_config, find_
 from app.core.speedtest import measure_speed_via_proxy
 from app.config import settings
 from app.database import get_db_connection, get_setting
+
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 async def fast_tcp_check(host: str, port: int, timeout: float = 1.5) -> bool:
     """Quickly check if the host:port is reachable via TCP."""
@@ -121,13 +124,24 @@ check_progress = {
     "traffic_up_bytes": 0
 }
 
+cancel_check_requested = False
+
+def stop_active_check() -> bool:
+    global cancel_check_requested
+    if check_progress["is_running"]:
+        cancel_check_requested = True
+        check_progress["mode"] = "остановка..."
+        return True
+    return False
+
 async def run_full_check_cycle() -> Dict[str, Any]:
     """
     Runs health check for all active and pending configurations in the database.
     Prunes dead configurations if fail_count exceeds threshold.
     """
-    global check_progress
+    global check_progress, cancel_check_requested
     start_time = time.perf_counter()
+    cancel_check_requested = False
     speedtest_val = await get_setting("speedtest_enabled", "0")
     enable_speedtest = speedtest_val == "1"
     
@@ -162,7 +176,12 @@ async def run_full_check_cycle() -> Dict[str, Any]:
     }
 
     async def check_item(row):
+        global cancel_check_requested
+        if cancel_check_requested:
+            return None
         async with sem:
+            if cancel_check_requested:
+                return None
             from app.core.parser import parse_single_link
             cfg = parse_single_link(row["raw_link"])
             if not cfg:
@@ -174,6 +193,9 @@ async def run_full_check_cycle() -> Dict[str, Any]:
                 )
                 res = (row["id"], is_alive, ping, down_mbps, up_mbps, down_b, up_b, err)
             
+            if cancel_check_requested:
+                return None
+
             check_progress["current"] += 1
             if res[1]:
                 check_progress["alive"] += 1
@@ -186,11 +208,14 @@ async def run_full_check_cycle() -> Dict[str, Any]:
 
     try:
         tasks = [check_item(r) for r in rows]
-        check_results = await asyncio.gather(*tasks)
+        raw_results = await asyncio.gather(*tasks)
     finally:
         check_progress["is_running"] = False
+        cancel_check_requested = False
 
-    now_iso = datetime.utcnow().isoformat()
+    check_results = [r for r in raw_results if r is not None]
+
+    now_iso = datetime.now(MOSCOW_TZ).isoformat()
     cycle_down = 0
     cycle_up = 0
 

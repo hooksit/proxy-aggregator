@@ -153,10 +153,16 @@
             <div class="bg-card border border-border rounded-2xl p-5">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Чекер пинга</span>
-                    <button onclick="triggerImmediateCheck()" id="btnTriggerCheck" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition" title="Проверить сейчас">
-                        <i class="fa-solid fa-bolt"></i>
-                        <span>Проверить</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="triggerImmediateCheck()" id="btnTriggerCheck" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition" title="Проверить сейчас">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Проверить</span>
+                        </button>
+                        <button onclick="stopCheck()" id="btnStopCheck" class="text-xs text-slate-500 flex items-center gap-1 font-medium transition opacity-40 cursor-not-allowed" title="Остановить проверку" disabled>
+                            <i class="fa-solid fa-stop"></i>
+                            <span>Стоп</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="text-xs text-slate-300 space-y-1">
                     <div class="flex justify-between">
@@ -242,6 +248,10 @@
                     <span class="text-rose-400">Мертвых: <b id="progressDead">0</b></span>
                     <span class="text-slate-600">•</span>
                     <span class="text-indigo-300">Трафик: <b id="progressTraffic">↓ 0 B / ↑ 0 B</b></span>
+                    <button onclick="stopCheck()" class="ml-2 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1 shadow transition cursor-pointer" title="Остановить проверку">
+                        <i class="fa-solid fa-stop"></i>
+                        <span>Остановить</span>
+                    </button>
                 </div>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-2.5 mt-3 overflow-hidden border border-slate-700/80 shadow-inner">
@@ -584,13 +594,33 @@
             loadConfigs();
         }
 
-        // Format Date
+        // Format Date (Moscow Time UTC+3)
         function formatDate(isoStr) {
             if (!isoStr) return '--:--';
             try {
-                const d = new Date(isoStr);
-                return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' +
-                       d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+                let s = String(isoStr).trim();
+                if (s.length >= 19 && s[10] === ' ') {
+                    s = s.substring(0, 10) + 'T' + s.substring(11);
+                }
+                if (!s.endsWith('Z') && !s.includes('+', 10) && !s.includes('-', 10)) {
+                    s += 'Z';
+                }
+                const d = new Date(s);
+                if (isNaN(d.getTime())) return isoStr;
+
+                const timeStr = d.toLocaleTimeString('ru-RU', {
+                    timeZone: 'Europe/Moscow',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                const dateStr = d.toLocaleDateString('ru-RU', {
+                    timeZone: 'Europe/Moscow',
+                    day: '2-digit',
+                    month: '2-digit'
+                });
+                return `${timeStr} ${dateStr}`;
             } catch {
                 return isoStr;
             }
@@ -644,12 +674,28 @@
                     protoDiv.innerHTML += `<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 font-mono text-[10px]">${proto.toUpperCase()}: ${count}</span>`;
                 }
 
+                // Check active state
+                const isChecking = data.flags.is_checking_now || (data.check_progress && data.check_progress.is_running);
+
                 // If running, show spin on buttons
                 const btnParse = document.getElementById('btnTriggerParse');
                 btnParse.innerHTML = data.flags.is_parsing_now ? '<i class="fa-solid fa-spinner fa-spin"></i> Сборка...' : '<i class="fa-solid fa-arrows-rotate"></i> Собрать';
                 
                 const btnCheck = document.getElementById('btnTriggerCheck');
-                btnCheck.innerHTML = data.flags.is_checking_now ? '<i class="fa-solid fa-spinner fa-spin"></i> Чек...' : '<i class="fa-solid fa-bolt"></i> Проверить';
+                btnCheck.innerHTML = isChecking ? '<i class="fa-solid fa-spinner fa-spin"></i> Чек...' : '<i class="fa-solid fa-bolt"></i> Проверить';
+
+                const btnStop = document.getElementById('btnStopCheck');
+                if (btnStop) {
+                    if (isChecking) {
+                        btnStop.disabled = false;
+                        btnStop.className = 'text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-semibold transition animate-pulse cursor-pointer';
+                        btnStop.innerHTML = '<i class="fa-solid fa-circle-stop"></i> <span>Стоп!</span>';
+                    } else {
+                        btnStop.disabled = true;
+                        btnStop.className = 'text-xs text-slate-500 flex items-center gap-1 font-medium transition opacity-40 cursor-not-allowed';
+                        btnStop.innerHTML = '<i class="fa-solid fa-stop"></i> <span>Стоп</span>';
+                    }
+                }
 
                 // Check Progress Banner updates
                 const banner = document.getElementById('checkProgressBanner');
@@ -857,6 +903,24 @@
                 console.error(e);
             }
             setTimeout(() => { loadStats(); }, 500);
+        }
+
+        async function stopCheck() {
+            const btnStop = document.getElementById('btnStopCheck');
+            if (btnStop) btnStop.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Стоп...';
+            showToast('Остановка проверки...', 'info');
+            try {
+                const res = await fetch('/api/dashboard/stop-check', { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message || 'Проверка остановлена', 'info');
+            } catch (e) {
+                showToast('Ошибка остановки проверки', 'error');
+            } finally {
+                setTimeout(() => {
+                    loadStats();
+                    loadConfigs();
+                }, 400);
+            }
         }
 
         async function clearDeadConfigs() {

@@ -102,3 +102,13 @@ async def trigger_parse(user: str = Depends(require_auth)):
 async def trigger_check(user: str = Depends(require_auth)):
     asyncio.create_task(safe_check_job())
     return {"status": "ok", "message": "Проверка конфигураций запущена в фоне"}
+
+@router.post("/stop-check")
+async def stop_check(user: str = Depends(require_auth)):
+    from app.core.tester import stop_active_check
+    was_running = stop_active_check()
+    return {
+        "status": "ok",
+        "was_running": was_running,
+        "message": "Проверка остановлена" if was_running else "Проверка сейчас не выполняется"
+    }
