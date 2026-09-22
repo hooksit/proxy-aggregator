@@ -196,8 +196,32 @@
             </div>
         </div>
 
+        <!-- Live Checking Progress Banner -->
+        <div id="checkProgressBanner" class="hidden bg-slate-900/90 border border-indigo-500/40 rounded-2xl p-4 shadow-xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2.5 font-semibold text-slate-100">
+                    <span class="flex h-3 w-3 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </span>
+                    <span id="progressTitle">Идет проверка конфигураций...</span>
+                </div>
+                <div class="flex items-center gap-3 text-slate-300 font-mono text-[11px]">
+                    <span>Проверено: <b id="progressCount" class="text-white">0 / 0</b> (<span id="progressPercent" class="text-indigo-400 font-bold">0%</span>)</span>
+                    <span class="text-slate-600">•</span>
+                    <span class="text-emerald-400">Живых: <b id="progressAlive">0</b></span>
+                    <span class="text-slate-600">•</span>
+                    <span class="text-rose-400">Мертвых: <b id="progressDead">0</b></span>
+                </div>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-2.5 mt-3 overflow-hidden border border-slate-700/80 shadow-inner">
+                <div id="checkProgressBar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
         <!-- Filter & Search Controls Bar -->
         <div class="bg-card border border-border rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+
             <!-- Protocols filter buttons -->
             <div class="flex flex-wrap items-center gap-1.5 w-full md:w-auto" id="protocolFilters">
                 <button onclick="setProtocolFilter('all')" data-proto="all" class="proto-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-indigo-600 text-white transition">Все</button>
@@ -405,7 +429,9 @@
         let currentPage = 0;
         const PAGE_SIZE = 40;
         let debounceTimer = null;
+        let fastPollTimer = null;
         let currentQrRawLink = '';
+
 
         // Toast Helper
         function showToast(message, type = 'info') {
@@ -577,10 +603,33 @@
                 const btnCheck = document.getElementById('btnTriggerCheck');
                 btnCheck.innerHTML = data.flags.is_checking_now ? '<i class="fa-solid fa-spinner fa-spin"></i> Чек...' : '<i class="fa-solid fa-bolt"></i> Проверить';
 
+                // Check Progress Banner updates
+                const banner = document.getElementById('checkProgressBanner');
+                const cp = data.check_progress;
+                if (cp && cp.is_running) {
+                    if (banner) banner.classList.remove('hidden');
+                    document.getElementById('progressTitle').innerText = `Идет ${cp.mode || 'проверка'}...`;
+                    document.getElementById('progressCount').innerText = `${cp.current} / ${cp.total}`;
+                    document.getElementById('progressPercent').innerText = `${cp.percent}%`;
+                    document.getElementById('progressAlive').innerText = cp.alive;
+                    document.getElementById('progressDead').innerText = cp.dead;
+                    document.getElementById('checkProgressBar').style.width = `${cp.percent}%`;
+                    
+                    // Poll fast (every 2s) while checking so numbers tick in real-time
+                    clearTimeout(fastPollTimer);
+                    fastPollTimer = setTimeout(() => { loadStats(); loadConfigs(); }, 2000);
+                } else {
+                    if (banner && !banner.classList.contains('hidden')) {
+                        banner.classList.add('hidden');
+                        loadConfigs();
+                    }
+                }
+
             } catch (e) {
                 console.error('Failed to load stats', e);
             }
         }
+
 
         function updateSpeedtestBadge(isEnabled) {
             const stBadge = document.getElementById('speedtestStatusBadge');
@@ -684,10 +733,10 @@
                             <td class="py-3 px-4 max-w-xs truncate text-slate-400" title="${item.name || ''}">
                                 ${item.name || '--'}
                             </td>
-                            <td class="py-3 px-4">
+                            <td class="py-3 px-4" id="pingCell_${item.id}">
                                 ${pingBadge}
                             </td>
-                            <td class="py-3 px-4">
+                            <td class="py-3 px-4" id="speedCell_${item.id}">
                                 ${speedBadge}
                             </td>
                             <td class="py-3 px-4 text-slate-400 text-[11px]">
@@ -700,7 +749,7 @@
                                 <button onclick="showQrById(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 transition" title="QR-код">
                                     <i class="fa-solid fa-qrcode"></i>
                                 </button>
-                                <button onclick="checkSingle(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 transition" title="Перепроверить">
+                                <button id="btnCheck_${item.id}" onclick="checkSingle(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 transition" title="Перепроверить">
                                     <i class="fa-solid fa-play text-[10px]"></i>
                                 </button>
                                 <button onclick="deleteConfig(${item.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-rose-400 transition" title="Удалить">
@@ -732,8 +781,20 @@
 
         async function triggerImmediateCheck() {
             showToast('Запуск проверки конфигураций...', 'info');
-            await fetch('/api/dashboard/trigger-check', { method: 'POST' });
-            setTimeout(() => { loadStats(); loadConfigs(); }, 1500);
+            const btn = document.getElementById('btnTriggerCheck');
+            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Чек...';
+            const banner = document.getElementById('checkProgressBanner');
+            if (banner) {
+                banner.classList.remove('hidden');
+                document.getElementById('progressTitle').innerText = 'Запуск проверки...';
+                document.getElementById('checkProgressBar').style.width = '2%';
+            }
+            try {
+                await fetch('/api/dashboard/trigger-check', { method: 'POST' });
+            } catch (e) {
+                console.error(e);
+            }
+            setTimeout(() => { loadStats(); }, 500);
         }
 
         async function clearDeadConfigs() {
@@ -746,20 +807,40 @@
         }
 
         async function checkSingle(id) {
-            showToast(`Проверка узла #${id}...`, 'info');
-            const res = await fetch(`/api/configs/${id}/check`, { method: 'POST' });
-            const data = await res.json();
-            if (data.is_alive) {
-                let msg = `Узел рабочий! Пинг: ${data.ping_ms} ms`;
-                if (data.download_mbps > 0) {
-                    msg += ` • Скорость: D ${data.download_mbps} / U ${data.upload_mbps} Mbps`;
-                }
-                showToast(msg, 'success');
-            } else {
-                showToast(`Узел недоступен: ${data.error || 'таймаут'}`, 'error');
+            const btn = document.getElementById(`btnCheck_${id}`);
+            const pingCell = document.getElementById(`pingCell_${id}`);
+            const speedCell = document.getElementById(`speedCell_${id}`);
+            
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-[10px] text-indigo-400"></i>';
             }
-            loadConfigs();
-            loadStats();
+            if (pingCell) {
+                pingCell.innerHTML = '<span class="px-2 py-0.5 rounded-full border text-[11px] font-mono bg-indigo-500/10 text-indigo-400 border-indigo-500/30 animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-1"></i>тест...</span>';
+            }
+            if (speedCell) {
+                speedCell.innerHTML = '<span class="text-indigo-400 font-mono text-[11px] animate-pulse"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>замер...</span>';
+            }
+
+            showToast(`Проверка узла #${id}...`, 'info');
+            try {
+                const res = await fetch(`/api/configs/${id}/check`, { method: 'POST' });
+                const data = await res.json();
+                if (data.is_alive) {
+                    let msg = `Узел #${id} рабочий! Пинг: ${data.ping_ms} ms`;
+                    if (data.download_mbps > 0) {
+                        msg += ` • Скорость: D ${data.download_mbps} / U ${data.upload_mbps} Mbps`;
+                    }
+                    showToast(msg, 'success');
+                } else {
+                    showToast(`Узел #${id} недоступен: ${data.error || 'таймаут'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Ошибка проверки узла #${id}`, 'error');
+            } finally {
+                loadConfigs();
+                loadStats();
+            }
         }
 
 

@@ -103,11 +103,22 @@ async def test_single_proxy(
             except Exception:
                 pass
 
+check_progress = {
+    "is_running": False,
+    "current": 0,
+    "total": 0,
+    "alive": 0,
+    "dead": 0,
+    "mode": "пинг",
+    "percent": 0
+}
+
 async def run_full_check_cycle() -> Dict[str, Any]:
     """
     Runs health check for all active and pending configurations in the database.
     Prunes dead configurations if fail_count exceeds threshold.
     """
+    global check_progress
     start_time = time.perf_counter()
     speedtest_val = await get_setting("speedtest_enabled", "0")
     enable_speedtest = speedtest_val == "1"
@@ -120,6 +131,14 @@ async def run_full_check_cycle() -> Dict[str, Any]:
         
     if not rows:
         return {"total": 0, "alive": 0, "dead": 0, "purged": 0}
+
+    check_progress["is_running"] = True
+    check_progress["total"] = len(rows)
+    check_progress["current"] = 0
+    check_progress["alive"] = 0
+    check_progress["dead"] = 0
+    check_progress["mode"] = "замер скорости (50МБ)" if enable_speedtest else "проверка пинга"
+    check_progress["percent"] = 0
 
     sem = asyncio.Semaphore(settings.CONCURRENT_CHECKS_LIMIT)
     
@@ -135,18 +154,30 @@ async def run_full_check_cycle() -> Dict[str, Any]:
             from app.core.parser import parse_single_link
             cfg = parse_single_link(row["raw_link"])
             if not cfg:
-                return row["id"], False, -1, 0.0, 0.0, "Invalid link"
+                res = (row["id"], False, -1, 0.0, 0.0, "Invalid link")
+            else:
+                is_alive, ping, down_mbps, up_mbps, err = await test_single_proxy(
+                    cfg,
+                    enable_speedtest=enable_speedtest
+                )
+                res = (row["id"], is_alive, ping, down_mbps, up_mbps, err)
             
-            is_alive, ping, down_mbps, up_mbps, err = await test_single_proxy(
-                cfg,
-                enable_speedtest=enable_speedtest
-            )
-            return row["id"], is_alive, ping, down_mbps, up_mbps, err
+            check_progress["current"] += 1
+            if res[1]:
+                check_progress["alive"] += 1
+            else:
+                check_progress["dead"] += 1
+            check_progress["percent"] = int((check_progress["current"] / max(1, check_progress["total"])) * 100)
+            return res
 
-    tasks = [check_item(r) for r in rows]
-    check_results = await asyncio.gather(*tasks)
+    try:
+        tasks = [check_item(r) for r in rows]
+        check_results = await asyncio.gather(*tasks)
+    finally:
+        check_progress["is_running"] = False
 
     now_iso = datetime.utcnow().isoformat()
+
 
     async with get_db_connection() as db:
         for cid, is_alive, ping, down_mbps, up_mbps, err in check_results:

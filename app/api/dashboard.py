@@ -3,8 +3,10 @@ from fastapi import APIRouter, Depends
 from app.auth import require_auth
 from app.database import get_db_connection, get_setting
 from app.scheduler import get_scheduler_status, safe_parse_job, safe_check_job
+from app.core.tester import check_progress
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
 
 @router.get("/stats")
 async def get_dashboard_stats(user: str = Depends(require_auth)):
@@ -68,10 +70,12 @@ async def get_dashboard_stats(user: str = Depends(require_auth)):
         "flags": {
             "speedtest_enabled": speedtest_enabled,
             "is_parsing_now": scheduler_status["is_parsing_now"],
-            "is_checking_now": scheduler_status["is_checking_now"]
+            "is_checking_now": scheduler_status["is_checking_now"] or check_progress.get("is_running", False)
         },
+        "check_progress": check_progress,
         "recent_logs": recent_logs
     }
+
 
 @router.post("/trigger-parse")
 async def trigger_parse(user: str = Depends(require_auth)):
