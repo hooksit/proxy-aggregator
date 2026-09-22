@@ -27,10 +27,10 @@ async def fast_tcp_check(host: str, port: int, timeout: float = 1.5) -> bool:
 async def test_single_proxy(
     cfg: ProxyConfig,
     enable_speedtest: bool = False
-) -> Tuple[bool, int, float, float, Optional[str]]:
+) -> Tuple[bool, int, float, float, int, int, Optional[str]]:
     """
     Tests a proxy configuration.
-    Returns: (is_alive, ping_ms, download_mbps, upload_mbps, error_message)
+    Returns: (is_alive, ping_ms, download_mbps, upload_mbps, down_bytes, up_bytes, error_message)
     """
     singbox_bin = get_singbox_executable()
     
@@ -38,14 +38,14 @@ async def test_single_proxy(
     if cfg.protocol in ["vless", "vmess", "shadowsocks", "trojan"]:
         is_port_open = await fast_tcp_check(cfg.server, cfg.port, timeout=2.0)
         if not is_port_open:
-            return False, -1, 0.0, 0.0, "Connection refused or timed out on port"
+            return False, -1, 0.0, 0.0, 0, 0, "Connection refused or timed out on port"
 
     # 2. If sing-box is not available, return TCP check result as fallback
     if not singbox_bin:
         t0 = time.perf_counter()
         ok = await fast_tcp_check(cfg.server, cfg.port, timeout=settings.TEST_TIMEOUT_SECONDS)
         ping = int((time.perf_counter() - t0) * 1000) if ok else -1
-        return ok, ping, 0.0, 0.0, None if ok else "TCP connect failed"
+        return ok, ping, 0.0, 0.0, 0, 0, None if ok else "TCP connect failed"
 
     # 3. Deep check using sing-box
     in_port = find_free_port()
@@ -74,22 +74,28 @@ async def test_single_proxy(
             resp = await client.get(settings.PING_TEST_URL)
             if resp.status_code in [200, 204]:
                 ping_ms = int((time.perf_counter() - t0) * 1000)
+                down_bytes = len(resp.content) + 300
+                up_bytes = 200
                 
                 # Run speedtest if enabled
                 down_mbps, up_mbps = 0.0, 0.0
                 if enable_speedtest:
-                    down_mbps, up_mbps = await measure_speed_via_proxy(
+                    down_mbps, up_mbps, st_down, st_up = await measure_speed_via_proxy(
                         in_port,
                         max_bytes=settings.SPEEDTEST_MAX_BYTES,
                         timeout_seconds=12.0
                     )
+                    down_bytes += st_down
+                    up_bytes += st_up
                 
-                return True, ping_ms, down_mbps, up_mbps, None
+                return True, ping_ms, down_mbps, up_mbps, down_bytes, up_bytes, None
             else:
-                return False, -1, 0.0, 0.0, f"HTTP status {resp.status_code}"
+                down_bytes = len(resp.content) + 300
+                up_bytes = 200
+                return False, -1, 0.0, 0.0, down_bytes, up_bytes, f"HTTP status {resp.status_code}"
 
     except Exception as e:
-        return False, -1, 0.0, 0.0, str(e)
+        return False, -1, 0.0, 0.0, 0, 0, str(e)
     finally:
         if proc:
             try:
@@ -110,7 +116,9 @@ check_progress = {
     "alive": 0,
     "dead": 0,
     "mode": "пинг",
-    "percent": 0
+    "percent": 0,
+    "traffic_down_bytes": 0,
+    "traffic_up_bytes": 0
 }
 
 async def run_full_check_cycle() -> Dict[str, Any]:
@@ -130,7 +138,7 @@ async def run_full_check_cycle() -> Dict[str, Any]:
         rows = await cursor.fetchall()
         
     if not rows:
-        return {"total": 0, "alive": 0, "dead": 0, "purged": 0}
+        return {"total": 0, "alive": 0, "dead": 0, "purged": 0, "traffic_down_bytes": 0, "traffic_up_bytes": 0}
 
     check_progress["is_running"] = True
     check_progress["total"] = len(rows)
@@ -139,6 +147,8 @@ async def run_full_check_cycle() -> Dict[str, Any]:
     check_progress["dead"] = 0
     check_progress["mode"] = "замер скорости (50МБ)" if enable_speedtest else "проверка пинга"
     check_progress["percent"] = 0
+    check_progress["traffic_down_bytes"] = 0
+    check_progress["traffic_up_bytes"] = 0
 
     sem = asyncio.Semaphore(settings.CONCURRENT_CHECKS_LIMIT)
     
@@ -146,7 +156,9 @@ async def run_full_check_cycle() -> Dict[str, Any]:
         "total": len(rows),
         "alive": 0,
         "dead": 0,
-        "purged": 0
+        "purged": 0,
+        "traffic_down_bytes": 0,
+        "traffic_up_bytes": 0
     }
 
     async def check_item(row):
@@ -154,19 +166,21 @@ async def run_full_check_cycle() -> Dict[str, Any]:
             from app.core.parser import parse_single_link
             cfg = parse_single_link(row["raw_link"])
             if not cfg:
-                res = (row["id"], False, -1, 0.0, 0.0, "Invalid link")
+                res = (row["id"], False, -1, 0.0, 0.0, 0, 0, "Invalid link")
             else:
-                is_alive, ping, down_mbps, up_mbps, err = await test_single_proxy(
+                is_alive, ping, down_mbps, up_mbps, down_b, up_b, err = await test_single_proxy(
                     cfg,
                     enable_speedtest=enable_speedtest
                 )
-                res = (row["id"], is_alive, ping, down_mbps, up_mbps, err)
+                res = (row["id"], is_alive, ping, down_mbps, up_mbps, down_b, up_b, err)
             
             check_progress["current"] += 1
             if res[1]:
                 check_progress["alive"] += 1
             else:
                 check_progress["dead"] += 1
+            check_progress["traffic_down_bytes"] += res[5]
+            check_progress["traffic_up_bytes"] += res[6]
             check_progress["percent"] = int((check_progress["current"] / max(1, check_progress["total"])) * 100)
             return res
 
@@ -177,10 +191,13 @@ async def run_full_check_cycle() -> Dict[str, Any]:
         check_progress["is_running"] = False
 
     now_iso = datetime.utcnow().isoformat()
-
+    cycle_down = 0
+    cycle_up = 0
 
     async with get_db_connection() as db:
-        for cid, is_alive, ping, down_mbps, up_mbps, err in check_results:
+        for cid, is_alive, ping, down_mbps, up_mbps, down_b, up_b, err in check_results:
+            cycle_down += down_b
+            cycle_up += up_b
             if is_alive:
                 results["alive"] += 1
                 await db.execute("""
@@ -189,11 +206,13 @@ async def run_full_check_cycle() -> Dict[str, Any]:
                         ping_ms = ?,
                         download_mbps = CASE WHEN ? > 0 THEN ? ELSE download_mbps END,
                         upload_mbps = CASE WHEN ? > 0 THEN ? ELSE upload_mbps END,
+                        traffic_down_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_down_bytes END,
+                        traffic_up_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_up_bytes END,
                         fail_count = 0,
                         last_checked_at = ?,
                         last_error = NULL
                     WHERE id = ?
-                """, (ping, down_mbps, down_mbps, up_mbps, up_mbps, now_iso, cid))
+                """, (ping, down_mbps, down_mbps, up_mbps, up_mbps, down_b, down_b, up_b, up_b, now_iso, cid))
             else:
                 results["dead"] += 1
                 # Increment fail count
@@ -210,11 +229,21 @@ async def run_full_check_cycle() -> Dict[str, Any]:
                         UPDATE configs
                         SET is_active = 0,
                             ping_ms = -1,
+                            traffic_down_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_down_bytes END,
+                            traffic_up_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_up_bytes END,
                             fail_count = ?,
                             last_checked_at = ?,
                             last_error = ?
                         WHERE id = ?
-                    """, (current_fails, now_iso, err, cid))
+                    """, (down_b, down_b, up_b, up_b, current_fails, now_iso, err, cid))
+
+        # Update cumulative traffic settings
+        cur_down_val = await get_setting("total_traffic_down_bytes", "0")
+        cur_up_val = await get_setting("total_traffic_up_bytes", "0")
+        new_down = (int(cur_down_val) if cur_down_val.isdigit() else 0) + cycle_down
+        new_up = (int(cur_up_val) if cur_up_val.isdigit() else 0) + cycle_up
+        await db.execute("INSERT INTO system_settings (key, value) VALUES ('total_traffic_down_bytes', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(new_down),))
+        await db.execute("INSERT INTO system_settings (key, value) VALUES ('total_traffic_up_bytes', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(new_up),))
 
         # Record check run in settings and metrics_log
         await db.execute(
@@ -222,10 +251,13 @@ async def run_full_check_cycle() -> Dict[str, Any]:
             (now_iso,)
         )
         duration = round(time.perf_counter() - start_time, 2)
+        results["traffic_down_bytes"] = cycle_down
+        results["traffic_up_bytes"] = cycle_up
+
         await db.execute("""
-            INSERT INTO metrics_log (action, total_active, total_dead, purged_count, duration_seconds, details)
-            VALUES ('check', ?, ?, ?, ?, ?)
-        """, (results["alive"], results["dead"], results["purged"], duration, json.dumps(results)))
+            INSERT INTO metrics_log (action, total_active, total_dead, purged_count, duration_seconds, traffic_down_bytes, traffic_up_bytes, details)
+            VALUES ('check', ?, ?, ?, ?, ?, ?, ?)
+        """, (results["alive"], results["dead"], results["purged"], duration, cycle_down, cycle_up, json.dumps(results)))
         
         await db.commit()
 

@@ -58,3 +58,9 @@ async def toggle_speedtest(user: str = Depends(require_auth)):
     new_val = "0" if current == "1" else "1"
     await set_setting("speedtest_enabled", new_val)
     return {"status": "ok", "speedtest_enabled": new_val == "1"}
+
+@router.post("/reset-traffic")
+async def reset_traffic(user: str = Depends(require_auth)):
+    await set_setting("total_traffic_down_bytes", "0")
+    await set_setting("total_traffic_up_bytes", "0")
+    return {"status": "ok", "message": "Счетчик трафика сброшен"}

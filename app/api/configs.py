@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -20,7 +21,7 @@ class ManualAddRequest(BaseModel):
 async def get_configs(
     status: str = Query("active", description="active, dead, all"),
     protocol: str = Query("all", description="vless, vmess, shadowsocks, hysteria2, trojan, all"),
-    sort_by: str = Query("ping", description="ping, speed, date"),
+    sort_by: str = Query("ping", description="ping, speed, traffic, date"),
     search: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
@@ -44,6 +45,8 @@ async def get_configs(
 
     if sort_by == "speed":
         query_parts.append("ORDER BY download_mbps DESC, ping_ms ASC")
+    elif sort_by == "traffic":
+        query_parts.append("ORDER BY (traffic_down_bytes + traffic_up_bytes) DESC, ping_ms ASC")
     elif sort_by == "date":
         query_parts.append("ORDER BY id DESC")
     else:
@@ -127,25 +130,46 @@ async def check_single_config(config_id: int, user: str = Depends(require_auth))
     speedtest_val = await get_setting("speedtest_enabled", "0")
     enable_speedtest = speedtest_val == "1"
 
-    is_alive, ping, down, up, err = await test_single_proxy(cfg, enable_speedtest=enable_speedtest)
+    is_alive, ping, down, up, down_b, up_b, err = await test_single_proxy(cfg, enable_speedtest=enable_speedtest)
 
+    now_iso = datetime.utcnow().isoformat()
     async with get_db_connection() as db:
         if is_alive:
             await db.execute("""
                 UPDATE configs 
                 SET is_active = 1, ping_ms = ?, download_mbps = ?, upload_mbps = ?, 
-                    fail_count = 0, last_checked_at = datetime('now'), last_error = NULL
+                    traffic_down_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_down_bytes END,
+                    traffic_up_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_up_bytes END,
+                    fail_count = 0, last_checked_at = ?, last_error = NULL
                 WHERE id = ?
-            """, (ping, down, up, config_id))
+            """, (ping, down, up, down_b, down_b, up_b, up_b, now_iso, config_id))
         else:
             await db.execute("""
                 UPDATE configs 
-                SET is_active = 0, ping_ms = -1, fail_count = fail_count + 1, 
-                    last_checked_at = datetime('now'), last_error = ?
+                SET is_active = 0, ping_ms = -1, 
+                    traffic_down_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_down_bytes END,
+                    traffic_up_bytes = CASE WHEN ? > 0 THEN ? ELSE traffic_up_bytes END,
+                    fail_count = fail_count + 1, 
+                    last_checked_at = ?, last_error = ?
                 WHERE id = ?
-            """, (err, config_id))
-        await db.commit()
+            """, (down_b, down_b, up_b, up_b, now_iso, err, config_id))
 
+        # Update cumulative traffic settings
+        cur_down_val = await get_setting("total_traffic_down_bytes", "0")
+        cur_up_val = await get_setting("total_traffic_up_bytes", "0")
+        new_down = (int(cur_down_val) if cur_down_val.isdigit() else 0) + down_b
+        new_up = (int(cur_up_val) if cur_up_val.isdigit() else 0) + up_b
+        await db.execute("INSERT INTO system_settings (key, value) VALUES ('total_traffic_down_bytes', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(new_down),))
+        await db.execute("INSERT INTO system_settings (key, value) VALUES ('total_traffic_up_bytes', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(new_up),))
+
+        # Insert single check into metrics_log if traffic > 0
+        if down_b > 0 or up_b > 0:
+            await db.execute("""
+                INSERT INTO metrics_log (action, total_active, total_dead, duration_seconds, traffic_down_bytes, traffic_up_bytes, details)
+                VALUES ('single_check', ?, ?, 0.0, ?, ?, ?)
+            """, (1 if is_alive else 0, 0 if is_alive else 1, down_b, up_b, f'{{"config_id": {config_id}}}'))
+
+        await db.commit()
 
     return {
         "status": "ok",
@@ -153,5 +177,7 @@ async def check_single_config(config_id: int, user: str = Depends(require_auth))
         "ping_ms": ping,
         "download_mbps": down,
         "upload_mbps": up,
+        "traffic_down_bytes": down_b,
+        "traffic_up_bytes": up_b,
         "error": err
     }

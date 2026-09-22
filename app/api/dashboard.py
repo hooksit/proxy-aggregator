@@ -30,15 +30,20 @@ async def get_dashboard_stats(user: str = Depends(require_auth)):
         cur = await db.execute("SELECT COUNT(*) as cnt FROM sources WHERE enabled = 1")
         active_sources = (await cur.fetchone())["cnt"]
 
-        # Purged metrics in the last 24h
+        # Purged metrics & traffic in the last 24h
         cur = await db.execute("""
-            SELECT SUM(purged_count) as total_purged, SUM(added_count) as total_added
+            SELECT SUM(purged_count) as total_purged, 
+                   SUM(added_count) as total_added,
+                   SUM(traffic_down_bytes) as traffic_down_24h,
+                   SUM(traffic_up_bytes) as traffic_up_24h
             FROM metrics_log 
             WHERE created_at >= datetime('now', '-1 day')
         """)
         m_row = await cur.fetchone()
         purged_last_24h = m_row["total_purged"] or 0
         added_last_24h = m_row["total_added"] or 0
+        traffic_down_24h = m_row["traffic_down_24h"] or 0
+        traffic_up_24h = m_row["traffic_up_24h"] or 0
 
         # Recent metrics log
         cur = await db.execute("SELECT * FROM metrics_log ORDER BY id DESC LIMIT 5")
@@ -47,6 +52,11 @@ async def get_dashboard_stats(user: str = Depends(require_auth)):
     last_parse = await get_setting("last_parse_time", "")
     last_check = await get_setting("last_check_time", "")
     speedtest_enabled = (await get_setting("speedtest_enabled", "0")) == "1"
+
+    total_down_str = await get_setting("total_traffic_down_bytes", "0")
+    total_up_str = await get_setting("total_traffic_up_bytes", "0")
+    total_traffic_down = int(total_down_str) if total_down_str.isdigit() else 0
+    total_traffic_up = int(total_up_str) if total_up_str.isdigit() else 0
 
     scheduler_status = get_scheduler_status()
 
@@ -71,6 +81,12 @@ async def get_dashboard_stats(user: str = Depends(require_auth)):
             "speedtest_enabled": speedtest_enabled,
             "is_parsing_now": scheduler_status["is_parsing_now"],
             "is_checking_now": scheduler_status["is_checking_now"] or check_progress.get("is_running", False)
+        },
+        "traffic": {
+            "total_down_bytes": total_traffic_down,
+            "total_up_bytes": total_traffic_up,
+            "down_24h_bytes": traffic_down_24h,
+            "up_24h_bytes": traffic_up_24h
         },
         "check_progress": check_progress,
         "recent_logs": recent_logs

@@ -106,7 +106,7 @@
         </div>
 
         <!-- Metric Stat Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <!-- Card 1: Active Nodes -->
             <div class="bg-card border border-border rounded-2xl p-5 relative overflow-hidden">
                 <div class="flex items-center justify-between mb-3">
@@ -194,6 +194,34 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Card 5: Traffic Consumed -->
+            <div class="bg-card border border-border rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Расход трафика</span>
+                    <button onclick="resetTrafficStats()" class="text-xs text-slate-500 hover:text-indigo-400 transition" title="Сбросить общий счетчик">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+                <div class="text-xs text-slate-300 space-y-1.5 mt-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-down text-[10px] text-indigo-400"></i> Прием (D):
+                        </span>
+                        <span id="statTrafficDown" class="font-mono font-semibold text-white">0 B</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-up text-[10px] text-purple-400"></i> Передача (U):
+                        </span>
+                        <span id="statTrafficUp" class="font-mono font-semibold text-white">0 B</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-1 border-t border-border text-[11px]">
+                        <span class="text-slate-500">За 24ч (D/U):</span>
+                        <span id="statTraffic24h" class="text-slate-300 font-mono">0 / 0</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Live Checking Progress Banner -->
@@ -206,12 +234,14 @@
                     </span>
                     <span id="progressTitle">Идет проверка конфигураций...</span>
                 </div>
-                <div class="flex items-center gap-3 text-slate-300 font-mono text-[11px]">
+                <div class="flex items-center gap-3 text-slate-300 font-mono text-[11px] flex-wrap">
                     <span>Проверено: <b id="progressCount" class="text-white">0 / 0</b> (<span id="progressPercent" class="text-indigo-400 font-bold">0%</span>)</span>
                     <span class="text-slate-600">•</span>
                     <span class="text-emerald-400">Живых: <b id="progressAlive">0</b></span>
                     <span class="text-slate-600">•</span>
                     <span class="text-rose-400">Мертвых: <b id="progressDead">0</b></span>
+                    <span class="text-slate-600">•</span>
+                    <span class="text-indigo-300">Трафик: <b id="progressTraffic">↓ 0 B / ↑ 0 B</b></span>
                 </div>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-2.5 mt-3 overflow-hidden border border-slate-700/80 shadow-inner">
@@ -243,6 +273,7 @@
                 <select id="sortByFilter" onchange="loadConfigs()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none">
                     <option value="ping">Сортировка: Пинг (min)</option>
                     <option value="speed">Сортировка: Скорость (max)</option>
+                    <option value="traffic">Сортировка: Трафик (max)</option>
                     <option value="date">Сортировка: Новые</option>
                 </select>
 
@@ -266,13 +297,14 @@
                             <th class="py-3 px-4">Название</th>
                             <th class="py-3 px-4">Пинг</th>
                             <th class="py-3 px-4">Скорость (D/U)</th>
+                            <th class="py-3 px-4">Трафик (D/U)</th>
                             <th class="py-3 px-4">Проверено</th>
                             <th class="py-3 px-4 text-right">Действия</th>
                         </tr>
                     </thead>
                     <tbody id="configsTableBody" class="divide-y divide-border text-xs text-slate-300">
                         <tr>
-                            <td colspan="8" class="text-center py-12 text-slate-500">
+                            <td colspan="9" class="text-center py-12 text-slate-500">
                                 <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-indigo-500"></i>
                                 <div>Загрузка конфигураций...</div>
                             </td>
@@ -564,6 +596,15 @@
             }
         }
 
+        // Format Bytes Helper
+        function formatBytes(bytes) {
+            if (!bytes || bytes <= 0) return '0 B';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
         // Load Dashboard Stats
         async function loadStats() {
             try {
@@ -589,6 +630,13 @@
                 localStorage.setItem('speedtest_enabled', data.flags.speedtest_enabled ? '1' : '0');
                 updateSpeedtestBadge(data.flags.speedtest_enabled);
 
+                // Update Traffic Stats
+                if (data.traffic) {
+                    document.getElementById('statTrafficDown').innerText = formatBytes(data.traffic.total_down_bytes);
+                    document.getElementById('statTrafficUp').innerText = formatBytes(data.traffic.total_up_bytes);
+                    document.getElementById('statTraffic24h').innerText = `${formatBytes(data.traffic.down_24h_bytes)} / ${formatBytes(data.traffic.up_24h_bytes)}`;
+                }
+
                 // Protocols badges
                 const protoDiv = document.getElementById('statProtocols');
                 protoDiv.innerHTML = '';
@@ -613,6 +661,10 @@
                     document.getElementById('progressPercent').innerText = `${cp.percent}%`;
                     document.getElementById('progressAlive').innerText = cp.alive;
                     document.getElementById('progressDead').innerText = cp.dead;
+                    const progTraffic = document.getElementById('progressTraffic');
+                    if (progTraffic) {
+                        progTraffic.innerText = `↓ ${formatBytes(cp.traffic_down_bytes || 0)} / ↑ ${formatBytes(cp.traffic_up_bytes || 0)}`;
+                    }
                     document.getElementById('checkProgressBar').style.width = `${cp.percent}%`;
                     
                     // Poll fast (every 2s) while checking so numbers tick in real-time
@@ -679,7 +731,7 @@
                 const data = await res.json();
 
                 if (!data.items || data.items.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-500">Конфигурации не найдены</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-slate-500">Конфигурации не найдены</td></tr>`;
                     document.getElementById('paginationInfo').innerText = '0 из 0';
                     document.getElementById('prevPageBtn').disabled = true;
                     document.getElementById('nextPageBtn').disabled = true;
@@ -708,6 +760,13 @@
                     const up = item.upload_mbps ? `${item.upload_mbps} M` : '--';
                     const speedBadge = item.download_mbps > 0 
                         ? `<span class="font-mono text-[11px] text-indigo-400"><i class="fa-solid fa-arrow-down text-[10px]"></i> ${down} <span class="text-slate-600">/</span> <i class="fa-solid fa-arrow-up text-[10px]"></i> ${up}</span>`
+                        : `<span class="text-slate-500 font-mono text-[11px]">--</span>`;
+
+                    // Traffic format
+                    const downB = item.traffic_down_bytes || 0;
+                    const upB = item.traffic_up_bytes || 0;
+                    const trafficBadge = (downB > 0 || upB > 0)
+                        ? `<span class="font-mono text-[11px] text-slate-300"><i class="fa-solid fa-arrow-down text-[10px] text-indigo-400"></i> ${formatBytes(downB)} <span class="text-slate-600">/</span> <i class="fa-solid fa-arrow-up text-[10px] text-purple-400"></i> ${formatBytes(upB)}</span>`
                         : `<span class="text-slate-500 font-mono text-[11px]">--</span>`;
 
                     // Protocol badge
@@ -739,6 +798,9 @@
                             <td class="py-3 px-4" id="speedCell_${item.id}">
                                 ${speedBadge}
                             </td>
+                            <td class="py-3 px-4" id="trafficCell_${item.id}">
+                                ${trafficBadge}
+                            </td>
                             <td class="py-3 px-4 text-slate-400 text-[11px]">
                                 ${formatDate(item.last_checked_at)}
                             </td>
@@ -767,7 +829,7 @@
                 document.getElementById('nextPageBtn').disabled = offset + PAGE_SIZE >= data.total;
 
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-400">Ошибка загрузки таблицы</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-rose-400">Ошибка загрузки таблицы</td></tr>`;
             }
         }
 
@@ -810,6 +872,7 @@
             const btn = document.getElementById(`btnCheck_${id}`);
             const pingCell = document.getElementById(`pingCell_${id}`);
             const speedCell = document.getElementById(`speedCell_${id}`);
+            const trafficCell = document.getElementById(`trafficCell_${id}`);
             
             if (btn) {
                 btn.disabled = true;
@@ -821,6 +884,9 @@
             if (speedCell) {
                 speedCell.innerHTML = '<span class="text-indigo-400 font-mono text-[11px] animate-pulse"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>замер...</span>';
             }
+            if (trafficCell) {
+                trafficCell.innerHTML = '<span class="text-purple-400 font-mono text-[11px] animate-pulse"><i class="fa-solid fa-arrows-up-down fa-spin mr-1"></i>учет...</span>';
+            }
 
             showToast(`Проверка узла #${id}...`, 'info');
             try {
@@ -830,6 +896,9 @@
                     let msg = `Узел #${id} рабочий! Пинг: ${data.ping_ms} ms`;
                     if (data.download_mbps > 0) {
                         msg += ` • Скорость: D ${data.download_mbps} / U ${data.upload_mbps} Mbps`;
+                    }
+                    if (data.traffic_down_bytes > 0 || data.traffic_up_bytes > 0) {
+                        msg += ` • Трафик: D ${formatBytes(data.traffic_down_bytes)} / U ${formatBytes(data.traffic_up_bytes)}`;
                     }
                     showToast(msg, 'success');
                 } else {
@@ -849,6 +918,19 @@
             showToast(`Конфиг #${id} удален`, 'info');
             loadConfigs();
             loadStats();
+        }
+
+        async function resetTrafficStats() {
+            if (!confirm('Сбросить общий счетчик потраченного трафика?')) return;
+            try {
+                const res = await fetch('/api/settings/reset-traffic', { method: 'POST' });
+                if (res.ok) {
+                    showToast('Счетчик общего трафика сброшен', 'info');
+                    loadStats();
+                }
+            } catch (e) {
+                showToast('Ошибка сброса трафика', 'error');
+            }
         }
 
         // Sources Management

@@ -6,9 +6,10 @@ async def measure_speed_via_proxy(
     proxy_port: int,
     max_bytes: int = 50 * 1024 * 1024,
     timeout_seconds: float = 8.0
-) -> Tuple[float, float]:
+) -> Tuple[float, float, int, int]:
     """
     Measures download and upload throughput in Mbps through the local proxy.
+    Returns: (download_mbps, upload_mbps, downloaded_bytes, uploaded_bytes)
     Capped at 50MB, but dynamically measures speed within a 4-5 second window
     so slow nodes don't timeout with 0 Mbps.
     """
@@ -63,4 +64,4 @@ async def measure_speed_via_proxy(
     if duration_up > 0.2 and up_bytes > 50000:
         upload_mbps = round((up_bytes * 8) / (duration_up * 1_000_000), 2)
 
-    return download_mbps, upload_mbps
+    return download_mbps, upload_mbps, total_bytes, up_bytes

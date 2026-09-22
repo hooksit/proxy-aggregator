@@ -63,6 +63,8 @@ async def init_db():
                 ping_ms INTEGER DEFAULT -1,
                 download_mbps REAL DEFAULT 0.0,
                 upload_mbps REAL DEFAULT 0.0,
+                traffic_down_bytes INTEGER DEFAULT 0,
+                traffic_up_bytes INTEGER DEFAULT 0,
                 fail_count INTEGER DEFAULT 0,
                 last_checked_at TIMESTAMP,
                 last_error TEXT,
@@ -73,6 +75,14 @@ async def init_db():
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_active_ping ON configs(is_active, ping_ms);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_protocol ON configs(protocol);")
+
+        # Migration: Ensure traffic columns exist in configs for existing DBs
+        cursor = await db.execute("PRAGMA table_info(configs)")
+        cfg_cols = [row["name"] for row in await cursor.fetchall()]
+        if "traffic_down_bytes" not in cfg_cols:
+            await db.execute("ALTER TABLE configs ADD COLUMN traffic_down_bytes INTEGER DEFAULT 0;")
+        if "traffic_up_bytes" not in cfg_cols:
+            await db.execute("ALTER TABLE configs ADD COLUMN traffic_up_bytes INTEGER DEFAULT 0;")
 
         # System settings table
         await db.execute("""
@@ -93,10 +103,20 @@ async def init_db():
                 added_count INTEGER DEFAULT 0,
                 purged_count INTEGER DEFAULT 0,
                 duration_seconds REAL DEFAULT 0.0,
+                traffic_down_bytes INTEGER DEFAULT 0,
+                traffic_up_bytes INTEGER DEFAULT 0,
                 details TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Migration: Ensure traffic columns exist in metrics_log for existing DBs
+        cursor = await db.execute("PRAGMA table_info(metrics_log)")
+        log_cols = [row["name"] for row in await cursor.fetchall()]
+        if "traffic_down_bytes" not in log_cols:
+            await db.execute("ALTER TABLE metrics_log ADD COLUMN traffic_down_bytes INTEGER DEFAULT 0;")
+        if "traffic_up_bytes" not in log_cols:
+            await db.execute("ALTER TABLE metrics_log ADD COLUMN traffic_up_bytes INTEGER DEFAULT 0;")
 
         # Seed initial admin user if not exists
         cursor = await db.execute("SELECT id FROM users WHERE username = ?", (settings.DEFAULT_USERNAME,))
@@ -116,6 +136,8 @@ async def init_db():
             ("max_retries_before_purge", "3", "Количество неудачных проверок подряд перед удалением"),
             ("last_parse_time", "", "Время последнего парсинга"),
             ("last_check_time", "", "Время последней проверки"),
+            ("total_traffic_down_bytes", "0", "Всего потрачено трафика на прием (байт)"),
+            ("total_traffic_up_bytes", "0", "Всего потрачено трафика на передачу (байт)"),
         ]
         for key, val, desc in default_settings:
             await db.execute(
