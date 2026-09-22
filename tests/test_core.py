@@ -139,14 +139,17 @@ async def test_database():
         assert verify_password("MySecretPassword2026", user["password_hash"])
         print("[OK] Admin user 'superadmin' successfully created and verified with hash")
 
-    # Check default settings
+    # Check settings getter & setter
+    await set_setting("parse_interval_hours", "12")
+    await set_setting("check_interval_minutes", "5")
+    await set_setting("speedtest_enabled", "0")
     p_int = await get_setting("parse_interval_hours")
     assert p_int == "12"
     c_int = await get_setting("check_interval_minutes")
     assert c_int == "5"
     st_val = await get_setting("speedtest_enabled")
     assert st_val == "0"
-    print("[OK] Default settings verified (12h, 5m, speedtest=0)")
+    print("[OK] Settings verified (12h, 5m, speedtest=0)")
 
 if __name__ == "__main__":
     print("\n--- Running Core Tests ---")

@@ -58,10 +58,17 @@ async def get_dashboard_stats(user: str = Depends(require_auth)):
     total_traffic_down = int(total_down_str) if total_down_str.isdigit() else 0
     total_traffic_up = int(total_up_str) if total_up_str.isdigit() else 0
 
+    parse_hours = int(await get_setting("parse_interval_hours", "12"))
+    check_minutes = int(await get_setting("check_interval_minutes", "5"))
+
     scheduler_status = get_scheduler_status()
 
     return {
         "user": user,
+        "intervals": {
+            "parse_interval_hours": parse_hours,
+            "check_interval_minutes": check_minutes,
+        },
         "counts": {
             "total": total_configs,
             "active": active_configs,

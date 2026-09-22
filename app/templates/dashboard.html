@@ -136,7 +136,7 @@
                 <div class="text-xs text-slate-300 space-y-1">
                     <div class="flex justify-between">
                         <span class="text-slate-400">Интервал:</span>
-                        <span id="valParseInterval" class="font-semibold text-white">12 ч.</span>
+                        <span id="valParseInterval" class="font-semibold text-white">-- ч.</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-400">Обновлено:</span>
@@ -167,7 +167,7 @@
                 <div class="text-xs text-slate-300 space-y-1">
                     <div class="flex justify-between">
                         <span class="text-slate-400">Интервал:</span>
-                        <span id="valCheckInterval" class="font-semibold text-white">5 мин.</span>
+                        <span id="valCheckInterval" class="font-semibold text-white">-- мин.</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-400">Проверено:</span>
@@ -490,7 +490,11 @@
         }
 
         // Modal Helpers
-        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function openModal(id) { 
+            if (id === 'settingsModal') loadSettings();
+            if (id === 'sourcesModal') loadSources();
+            document.getElementById(id).classList.remove('hidden'); 
+        }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
         // Universal Clipboard Copy with Fallback (Works on HTTP & HTTPS)
@@ -655,6 +659,14 @@
                 document.getElementById('valNextParse').innerText = formatDate(data.timestamps.next_parse);
                 document.getElementById('valLastCheck').innerText = formatDate(data.timestamps.last_check);
                 document.getElementById('valNextCheck').innerText = formatDate(data.timestamps.next_check);
+
+                // Update intervals
+                if (data.intervals) {
+                    const elCheck = document.getElementById('valCheckInterval');
+                    if (elCheck) elCheck.innerText = `${data.intervals.check_interval_minutes} мин.`;
+                    const elParse = document.getElementById('valParseInterval');
+                    if (elParse) elParse.innerText = `${data.intervals.parse_interval_hours} ч.`;
+                }
 
                 // Update Speedtest toggle state
                 localStorage.setItem('speedtest_enabled', data.flags.speedtest_enabled ? '1' : '0');
